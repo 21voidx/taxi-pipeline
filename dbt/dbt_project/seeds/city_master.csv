@@ -1,0 +1,13 @@
+city_name,province,region,latitude_center,longitude_center,timezone,population_class
+Jakarta,DKI Jakarta,Java,-6.2088,106.8456,Asia/Jakarta,tier_1
+Surabaya,Jawa Timur,Java,-7.2504,112.7688,Asia/Jakarta,tier_1
+Bandung,Jawa Barat,Java,-6.9175,107.6191,Asia/Jakarta,tier_1
+Medan,Sumatera Utara,Sumatra,3.5952,98.6722,Asia/Jakarta,tier_1
+Semarang,Jawa Tengah,Java,-6.9932,110.4203,Asia/Jakarta,tier_2
+Makassar,Sulawesi Selatan,Sulawesi,-5.1477,119.4327,Asia/Makassar,tier_2
+Palembang,Sumatera Selatan,Sumatra,-2.9761,104.7754,Asia/Jakarta,tier_2
+Tangerang,Banten,Java,-6.1781,106.6298,Asia/Jakarta,tier_2
+Depok,Jawa Barat,Java,-6.4025,106.7942,Asia/Jakarta,tier_2
+Bekasi,Jawa Barat,Java,-6.2383,106.9756,Asia/Jakarta,tier_2
+Bali,Bali,Bali,-8.4095,115.1889,Asia/Makassar,tier_2
+Yogyakarta,DI Yogyakarta,Java,-7.7956,110.3695,Asia/Jakarta,tier_2

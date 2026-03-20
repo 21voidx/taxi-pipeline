@@ -1,0 +1,196 @@
+version: 2
+
+models:
+
+  # ──────────────────────────────────────────────────────────
+  # STATIC DIMENSIONS
+  # ──────────────────────────────────────────────────────────
+
+  - name: dim_date
+    description: Dimensi tanggal untuk join ke semua fact table.
+    columns:
+      - name: date_key
+        description: Integer YYYYMMDD, PK dimensi.
+        tests:
+          - unique
+          - not_null
+          - ride_hailing.date_key_format
+      - name: full_date
+        tests: [unique, not_null]
+      - name: day_name
+        tests:
+          - not_null
+          - accepted_values:
+              values: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
+      - name: month_num
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      - name: quarter_num
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+
+  - name: dim_time
+    description: Dimensi jam (0–23) dengan klasifikasi peak hour.
+    columns:
+      - name: time_key
+        tests:
+          - unique
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+      - name: time_bucket
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - early_morning
+                - morning
+                - midday
+                - afternoon
+                - evening_peak
+                - night
+                - midnight
+
+  - name: dim_payment_method
+    description: Lookup metode pembayaran.
+    columns:
+      - name: payment_method_key
+        tests: [unique, not_null]
+      - name: payment_method_name
+        tests: [unique, not_null]
+      - name: payment_method_category
+        tests:
+          - accepted_values:
+              values: [cash, card, digital_wallet, unknown]
+
+  - name: dim_trip_status
+    description: Lookup status trip.
+    columns:
+      - name: trip_status_key
+        tests: [unique, not_null]
+      - name: trip_status_name
+        tests: [unique, not_null]
+
+  # ──────────────────────────────────────────────────────────
+  # SCD TYPE 2 DIMENSIONS
+  # ──────────────────────────────────────────────────────────
+
+  - name: dim_customer
+    description: >
+      Dimensi customer dengan SCD Type 2.
+      Setiap perubahan data customer menghasilkan baris baru
+      dengan valid_from / valid_to yang diperbarui.
+    columns:
+      - name: customer_key
+        description: Surrogate key (hash dari customer_id + valid_from).
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: full_name
+        tests: [not_null]
+      - name: gender
+        tests:
+          - accepted_values:
+              values: [Pria, Wanita, Tidak Diketahui]
+      - name: age_group
+        tests:
+          - accepted_values:
+              values: [under_18, 18_24, 25_34, 35_44, 45_54, 55_plus]
+      - name: valid_from
+        tests: [not_null]
+      - name: is_current
+        tests:
+          - not_null
+          - ride_hailing.is_current_unique_per_id:
+              id_col: customer_id
+
+  - name: dim_driver
+    description: >
+      Dimensi driver dengan SCD Type 2.
+      Perubahan status driver (active → suspended, dll.)
+      menghasilkan versi historis baru.
+    columns:
+      - name: driver_key
+        tests: [unique, not_null]
+      - name: driver_id
+        tests: [not_null]
+      - name: driver_status
+        tests:
+          - accepted_values:
+              values: [active, inactive, suspended]
+      - name: is_current
+        tests:
+          - not_null
+          - ride_hailing.is_current_unique_per_id:
+              id_col: driver_id
+
+  # ──────────────────────────────────────────────────────────
+  # INCREMENTAL DIMENSIONS
+  # ──────────────────────────────────────────────────────────
+
+  - name: dim_vehicle
+    description: Dimensi kendaraan milik driver.
+    columns:
+      - name: vehicle_key
+        tests: [unique, not_null]
+      - name: vehicle_id
+        tests: [unique, not_null]
+      - name: driver_id
+        tests: [not_null]
+      - name: vehicle_type
+        tests:
+          - accepted_values:
+              values: [economy, standard, premium, motor]
+      - name: production_year
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2010
+              max_value: 2026
+
+  - name: dim_location
+    description: Dimensi area geografis unik yang muncul di trips.
+    columns:
+      - name: location_key
+        tests: [unique, not_null]
+      - name: city
+        tests: [not_null]
+      - name: area_name
+        tests: [not_null]
+      - name: latitude_center
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -11.0
+              max_value: 6.0
+      - name: longitude_center
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 95.0
+              max_value: 141.0
+
+  - name: dim_promo
+    description: Dimensi promosi / voucher diskon.
+    columns:
+      - name: promo_key
+        tests: [unique, not_null]
+      - name: promo_id
+        tests: [unique, not_null]
+      - name: promo_code
+        tests: [unique, not_null]
+      - name: discount_type
+        tests:
+          - accepted_values:
+              values: [percentage, fixed]
+      - name: discount_value
+        tests:
+          - not_null
+          - ride_hailing.not_negative
+      - name: promo_status
+        tests:
+          - accepted_values:
+              values: [active, expired, paused, draft]

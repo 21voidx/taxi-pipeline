@@ -1,0 +1,48 @@
+version: 2
+
+models:
+
+  - name: dm_trip_daily_city
+    description: >
+      Data mart operasional harian per kota.
+      Grain: 1 tanggal × 1 kota.
+      Digunakan untuk dashboard ops KPI.
+    columns:
+      - name: date_key
+        tests: [not_null, ride_hailing.date_key_format]
+      - name: city
+        tests: [not_null]
+      - name: total_trip_requested
+        tests: [not_null, ride_hailing.not_negative]
+      - name: completion_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.0
+              max_value: 1.0
+      - name: cancellation_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.0
+              max_value: 1.0
+
+  - name: dm_trip_hourly_city
+    description: >
+      Pola permintaan trip per jam per kota.
+      Grain: 1 tanggal × 1 jam × 1 kota.
+      Berguna untuk analisis surge dan demand forecasting.
+    columns:
+      - name: date_key
+        tests: [not_null]
+      - name: time_key
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 23
+      - name: city
+        tests: [not_null]
+      - name: avg_surge_multiplier
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1.0
+              max_value: 5.0

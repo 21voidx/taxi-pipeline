@@ -1,0 +1,190 @@
+version: 2
+
+models:
+
+  - name: fct_trip
+    description: >
+      Fact table utama untuk setiap trip.
+      Grain: 1 baris = 1 trip.
+      Hanya trip dengan status completed yang memiliki
+      actual_fare, actual_distance_km, dan timestamps lengkap.
+    columns:
+      - name: trip_key
+        tests: [unique, not_null]
+      - name: trip_id
+        tests: [unique, not_null]
+      - name: customer_key
+        tests: [not_null]
+      - name: driver_key
+        tests: [not_null]
+      - name: vehicle_key
+        tests: [not_null]
+      - name: request_date_key
+        tests:
+          - not_null
+          - ride_hailing.date_key_format
+      - name: trip_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: [completed, cancelled, no_show]
+      - name: trip_status:
+        tests:
+          - ride_hailing.completed_trip_has_timestamps
+      - name: estimated_distance_km
+        tests:
+          - ride_hailing.not_negative
+      - name: actual_distance_km
+        tests:
+          - ride_hailing.not_negative
+      - name: estimated_fare
+        tests:
+          - ride_hailing.not_negative
+      - name: actual_fare
+        tests:
+          - ride_hailing.not_negative
+      - name: surge_multiplier
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1.0
+              max_value: 5.0
+      - name: waiting_time_minute
+        tests:
+          - ride_hailing.not_negative
+      - name: trip_duration_minute
+        tests:
+          - ride_hailing.not_negative
+      - name: created_at
+        tests: [not_null]
+      - name: pickup_ts
+        tests:
+          - ride_hailing.timestamp_order:
+              before_col: request_ts
+
+  - name: fct_payment
+    description: >
+      Fact table pembayaran per trip.
+      Grain: 1 baris = 1 payment.
+      Hanya trip completed yang memiliki record di tabel ini.
+    columns:
+      - name: payment_key
+        tests: [unique, not_null]
+      - name: payment_id
+        tests: [unique, not_null]
+      - name: trip_key
+        tests: [not_null]
+      - name: customer_key
+        tests: [not_null]
+      - name: payment_date_key
+        tests:
+          - not_null
+          - ride_hailing.date_key_format
+      - name: payment_status
+        tests:
+          - accepted_values:
+              values: [success, failed, pending, refunded]
+      - name: gross_amount
+        tests:
+          - not_null
+          - ride_hailing.not_negative
+      - name: net_amount
+        tests:
+          - not_null
+          - ride_hailing.not_negative
+          - ride_hailing.net_amount_consistency
+      - name: discount_amount
+        tests: [ride_hailing.not_negative]
+      - name: tax_amount
+        tests: [ride_hailing.not_negative]
+      - name: toll_amount
+        tests: [ride_hailing.not_negative]
+      - name: tip_amount
+        tests: [ride_hailing.not_negative]
+
+  - name: fct_driver_payout
+    description: >
+      Fact table payout ke driver per trip selesai.
+      Grain: 1 baris = 1 payout.
+    columns:
+      - name: payout_key
+        tests: [unique, not_null]
+      - name: payout_id
+        tests: [unique, not_null]
+      - name: trip_key
+        tests: [not_null]
+      - name: driver_key
+        tests: [not_null]
+      - name: payout_date_key
+        tests:
+          - not_null
+          - ride_hailing.date_key_format
+      - name: payout_status
+        tests:
+          - accepted_values:
+              values: [paid, pending, failed]
+      - name: base_earning
+        tests:
+          - not_null
+          - ride_hailing.not_negative
+      - name: final_payout_amount
+        tests:
+          - not_null
+          - ride_hailing.not_negative
+      - name: incentive_amount
+        tests: [ride_hailing.not_negative]
+      - name: bonus_amount
+        tests: [ride_hailing.not_negative]
+      - name: deduction_amount
+        tests: [ride_hailing.not_negative]
+
+  - name: fct_rating
+    description: >
+      Fact table rating customer terhadap driver.
+      Grain: 1 baris = 1 rating. Hanya dari trip completed.
+    columns:
+      - name: rating_key
+        tests: [unique, not_null]
+      - name: rating_id
+        tests: [unique, not_null]
+      - name: trip_key
+        tests: [not_null]
+      - name: driver_key
+        tests: [not_null]
+      - name: customer_key
+        tests: [not_null]
+      - name: rating_score
+        tests:
+          - not_null
+          - ride_hailing.rating_score_range
+      - name: rating_category
+        tests:
+          - accepted_values:
+              values: [excellent, good, neutral, poor, very_poor]
+
+  - name: fct_promo_redemption
+    description: >
+      Fact table pemakaian promo per trip.
+      Grain: 1 baris = 1 redemption.
+    columns:
+      - name: promo_redemption_key
+        tests: [unique, not_null]
+      - name: redemption_id
+        tests: [unique, not_null]
+      - name: promo_key
+        tests: [not_null]
+      - name: trip_key
+        tests: [not_null]
+      - name: customer_key
+        tests: [not_null]
+      - name: redemption_date_key
+        tests:
+          - not_null
+          - ride_hailing.date_key_format
+      - name: redemption_status
+        tests:
+          - accepted_values:
+              values: [success, failed, reversed]
+      - name: discount_amount
+        tests:
+          - not_null
+          - ride_hailing.not_negative

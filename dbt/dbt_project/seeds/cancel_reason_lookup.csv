@@ -1,0 +1,13 @@
+cancel_reason_text,cancel_category,initiated_by,is_driver_fault,is_customer_fault
+Driver terlalu jauh,distance_too_far,customer,false,true
+Ganti rencana perjalanan,plan_changed,customer,false,true
+Menemukan transportasi lain,alternative_transport,customer,false,true
+Driver terlalu lama datang,driver_late,customer,true,false
+Lokasi penjemputan salah,wrong_location,customer,false,true
+Harga terlalu mahal,price_too_high,customer,false,true
+Salah pilih tipe kendaraan,wrong_vehicle_type,customer,false,true
+Penumpang tidak kunjung muncul,no_show,driver,false,true
+Driver tidak merespons,driver_unresponsive,system,true,false
+Aplikasi error,app_error,system,false,false
+Keadaan darurat driver,driver_emergency,driver,false,false
+Kondisi cuaca buruk,bad_weather,driver,false,false

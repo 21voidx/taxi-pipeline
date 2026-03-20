@@ -1,0 +1,36 @@
+[sqlfluff]
+templater = dbt
+dialect   = bigquery
+sql_file_exts = .sql
+
+# Lebar baris maksimal (sesuaikan dengan editor)
+max_line_length = 100
+
+# Indentasi 4 spasi (standar project ini)
+indent_unit = space
+tab_space_size = 4
+
+# Uppercase untuk keyword SQL
+capitalisation_policy = upper
+extended_capitalisation_policy = upper
+
+# Nama fungsi capitalize konsisten
+function_name_capitalisation = upper
+
+# Exclude dbt jinja blocks dari linting
+exclude_rules = L031,L034
+
+[sqlfluff:templater:dbt]
+project_dir  = .
+profiles_dir = ../dbt_profiles
+profile      = ride_hailing
+target       = dev
+
+[sqlfluff:rules:L010]
+capitalisation_policy = upper
+
+[sqlfluff:rules:L014]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:L030]
+capitalisation_policy = upper

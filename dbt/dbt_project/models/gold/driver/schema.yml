@@ -1,0 +1,62 @@
+version: 2
+
+models:
+
+  - name: dm_driver_daily_performance
+    description: >
+      KPI performa driver per hari: jumlah trip, completion rate,
+      total jarak, pendapatan, payout, dan rata-rata rating.
+      Grain: 1 tanggal × 1 driver.
+    columns:
+      - name: date_key
+        tests: [not_null, ride_hailing.date_key_format]
+      - name: driver_id
+        tests: [not_null]
+      - name: city
+        tests: [not_null]
+      - name: total_trip_assigned
+        tests: [not_null, ride_hailing.not_negative]
+      - name: total_trip_completed
+        tests: [ride_hailing.not_negative]
+      - name: completion_rate
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.0
+              max_value: 1.0
+      - name: avg_rating_score
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.0
+              max_value: 5.0
+      - name: total_payout_amount
+        tests: [ride_hailing.not_negative]
+
+  - name: dm_driver_monthly_summary
+    description: >
+      Ringkasan performa driver per bulan: trip, rating, payout,
+      bonus, insentif, dan hari aktif.
+      Grain: 1 bulan (YYYY-MM) × 1 driver.
+    columns:
+      - name: month_key
+        description: Format YYYY-MM, contoh 2026-01.
+        tests: [not_null]
+      - name: driver_id
+        tests: [not_null]
+      - name: total_trip_completed
+        tests: [ride_hailing.not_negative]
+      - name: avg_rating_score
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0.0
+              max_value: 5.0
+      - name: total_payout_amount
+        tests: [ride_hailing.not_negative]
+      - name: total_bonus_amount
+        tests: [ride_hailing.not_negative]
+      - name: total_incentive_amount
+        tests: [ride_hailing.not_negative]
+      - name: active_days
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 31
