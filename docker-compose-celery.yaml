@@ -301,6 +301,8 @@ services:
     <<: *airflow-common
     command: celery worker
     hostname: airflow-worker
+    ports:
+      - "8793:8793"
     healthcheck:
       # yamllint disable rule:line-length
       test:
