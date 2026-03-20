@@ -50,7 +50,10 @@ x-airflow-common:
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.6}
-  build: .
+  build:
+    context: .
+    dockerfile: Dockerfile
+    network: host
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -226,6 +229,8 @@ services:
       retries: 50
       start_period: 30s
     restart: always
+    networks:
+      - taxi-network
 
   # ─────────────────────────────────────────────
   # Airflow Apiserver
@@ -316,6 +321,8 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - taxi-network
 
   # ─────────────────────────────────────────────
   # Airflow Triggerer
@@ -457,6 +464,7 @@ services:
     build:
       context: ./data-generator/generator
       dockerfile: Dockerfile
+      network: host
     container_name: Taxi-data-generator
     environment:
       POSTGRES_HOST: postgres-ops
