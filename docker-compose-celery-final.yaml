@@ -153,6 +153,7 @@ services:
     volumes:
       - ./trino/catalog:/etc/trino/catalog
       - ./trino/etc/jvm.config:/etc/trino/jvm.config
+      - ./trino/etc/config.properties:/etc/trino/config.properties
       - ./credentials/service-account.json:/opt/gcp/service-account.json:ro
     environment:
       POSTGRES_HOST: 127.0.0.1
@@ -163,7 +164,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/v1/info"]
       interval: 15s
       timeout: 10s
       retries: 10
