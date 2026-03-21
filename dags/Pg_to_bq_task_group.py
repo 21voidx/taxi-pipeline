@@ -31,8 +31,6 @@ from helpers.trino_helper_task_group import TableConfig, make_table_task_group
 # ══════════════════════════════════════════════════════════════════════════════
 
 DAG_ID        = "postgres_to_bq_trino_multi_table"
-SCHEDULE      = CronDataIntervalTimetable("0 9 * * *", timezone="Asia/Jakarta"), 
-START_DATE    = pendulum.datetime(2026, 3, 20, tz="Asia/Jakarta")
 SOURCE_TZ     = "Asia/Jakarta"
 
 TRINO_CONN_ID = "trino_default"
@@ -244,8 +242,8 @@ with DAG(
         f"({len(TABLE_CONFIGS)} tabel)"
     ),
     default_args=default_args,
-    schedule=SCHEDULE,
-    start_date=START_DATE,
+    schedule=CronDataIntervalTimetable("0 9 * * *", timezone="Asia/Jakarta"),
+    start_date=pendulum.datetime(2026, 3, 20, tz="Asia/Jakarta"),
     catchup=True,
     max_active_runs=1,
     tags=["postgres", "bigquery", "trino", "ingestion", "multi-table"],
