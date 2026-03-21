@@ -23,7 +23,7 @@ from datetime import timedelta
 import pendulum
 from airflow import DAG
 from airflow.models.param import Param
-
+from airflow.timetables.interval import CronDataIntervalTimetable
 from helpers.trino_helper_task_group import TableConfig, make_table_task_group
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -31,7 +31,7 @@ from helpers.trino_helper_task_group import TableConfig, make_table_task_group
 # ══════════════════════════════════════════════════════════════════════════════
 
 DAG_ID        = "postgres_to_bq_trino_multi_table"
-SCHEDULE      = "0 9 * * *"
+SCHEDULE      = CronDataIntervalTimetable("0 9 * * *", timezone="Asia/Jakarta"), 
 START_DATE    = pendulum.datetime(2026, 3, 20, tz="Asia/Jakarta")
 SOURCE_TZ     = "Asia/Jakarta"
 
