@@ -302,8 +302,6 @@ services:
     command: celery worker
     container_name: taxi-airflow-worker
     hostname: airflow-worker
-    ports:
-      - "8793:8793"
     healthcheck:
       # yamllint disable rule:line-length
       test:
@@ -319,7 +317,6 @@ services:
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
       AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.get_host_ip_address"
-      AIRFLOW__LOGGING__WORKER_LOG_SERVER_HOST: "airflow-worker"
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
