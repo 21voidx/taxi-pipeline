@@ -31,8 +31,8 @@ from helpers.trino_helper_task_group import TableConfig, make_table_task_group
 # ══════════════════════════════════════════════════════════════════════════════
 
 DAG_ID        = "postgres_to_bq_trino_multi_table"
-SCHEDULE      = "@once"
-START_DATE    = pendulum.datetime(2026, 3, 21, tz="Asia/Jakarta"),
+SCHEDULE      = "0 9 * * *"
+START_DATE    = pendulum.datetime(2026, 3, 20, tz="Asia/Jakarta")
 SOURCE_TZ     = "Asia/Jakarta"
 
 TRINO_CONN_ID = "trino_default"
