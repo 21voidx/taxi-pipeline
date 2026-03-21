@@ -63,7 +63,7 @@ with DAG(
         },
         mounts=[
             Mount(
-                source="/mnt/e/DE_PORTO_V2/Taxi-Pipeline/credentials/service-account.json",
+                source="/home/void/taxi-pipeline/credentials/service-account.json",
                 target="/opt/gcp/service-account.json",
                 type="bind",
             ),
