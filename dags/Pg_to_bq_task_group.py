@@ -30,7 +30,7 @@ from helpers.trino_helper_task_group import TableConfig, make_table_task_group
 #  GLOBAL CONFIG
 # ══════════════════════════════════════════════════════════════════════════════
 
-DAG_ID        = "postgres_to_bq_trino_multi_table"
+DAG_ID        = "postgres_to_bq_trino_multi_table_V2"
 SOURCE_TZ     = "Asia/Jakarta"
 
 TRINO_CONN_ID = "trino_default"
