@@ -147,6 +147,7 @@ services:
   trino:
     image: trinodb/trino:477
     container_name: taxi-trino
+    network_mode: host
     ports:
       - "8081:8080"
     volumes:
@@ -154,10 +155,10 @@ services:
       - ./trino/etc/jvm.config:/etc/trino/jvm.config
       - ./credentials/service-account.json:/opt/gcp/service-account.json:ro
     environment:
-      POSTGRES_HOST: postgres-ops
+      POSTGRES_HOST: 127.0.0.1
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      MYSQL_HOST: mysql
+      MYSQL_HOST: 127.0.0.1
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
@@ -172,8 +173,6 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
-    networks:
-      - taxi-network
 
   redis:
     image: redis:7.2-bookworm
