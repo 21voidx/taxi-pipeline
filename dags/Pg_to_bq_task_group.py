@@ -32,7 +32,7 @@ from helpers.trino_helper_task_group import TableConfig, make_table_task_group
 
 DAG_ID        = "postgres_to_bq_trino_multi_table"
 SCHEDULE      = "0 9 * * *"
-START_DATE    = pendulum.datetime(2022, 6, 3, tz="Asia/Jakarta")
+START_DATE    = pendulum.datetime(2026, 3, 11, tz="Asia/Jakarta")
 SOURCE_TZ     = "Asia/Jakarta"
 
 TRINO_CONN_ID = "trino_default"

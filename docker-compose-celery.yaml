@@ -89,6 +89,9 @@ x-airflow-common:
   user: "${AIRFLOW_UID:-50000}:0"
   group_add:
     - "989"
+  dns:
+    - 8.8.8.8
+    - 1.1.1.1
   depends_on:
     &airflow-common-depends-on
     postgres:
