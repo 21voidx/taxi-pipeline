@@ -216,6 +216,118 @@ TABLE_CONFIGS: list[TableConfig] = [
             created_at, updated_at
         """,
     ),
+    # ── payments ───────────────────────────────────────────────────────────────
+    TableConfig(
+        pg_table        = "payments",
+        bq_final_table  = "payments",
+        merge_key       = "payment_id",
+        partition_field = "updated_at",
+        partition_type  = "MONTH",
+        cluster_fields  = ["payment_method", "payment_status"],
+        source_system   = "ride_ops_pg",
+        append_only     = False,
+        schema_fields   = [
+            {"name": "payment_id",      "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "trip_id",         "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "customer_id",     "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "payment_method",  "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "payment_status",  "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "gross_amount",    "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "discount_amount", "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "tax_amount",      "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "toll_amount",     "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "tip_amount",      "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "net_amount",      "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "paid_ts",         "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "created_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "updated_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
+            # pipeline metadata — selalu ada, jangan dihapus
+            {"name": "_ingested_at",    "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",  "type": "STRING",    "mode": "REQUIRED"},
+        ],
+        table_columns   = """
+            payment_id, trip_id, customer_id,
+            payment_method, payment_status,
+            gross_amount, discount_amount, tax_amount,
+            toll_amount, tip_amount, net_amount,
+            paid_ts, created_at, updated_at
+        """,
+    ),
+    # ── trip_status_logs ───────────────────────────────────────────────────────
+    TableConfig(
+        pg_table        = "trip_status_logs",
+        bq_final_table  = "trip_status_logs",
+        merge_key       = "trip_status_log_id",
+        partition_field = "created_at",
+        partition_type  = "MONTH",
+        cluster_fields  = ["status_code", "actor_type"],
+        source_system   = "ride_ops_pg",
+        append_only     = True,
+        schema_fields   = [
+            {"name": "trip_status_log_id", "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "trip_id",            "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "status_code",        "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "status_ts",          "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "actor_type",         "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "created_at",         "type": "TIMESTAMP", "mode": "REQUIRED"},
+            # pipeline metadata — selalu ada, jangan dihapus
+            {"name": "_ingested_at",       "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",     "type": "STRING",    "mode": "REQUIRED"},
+        ],
+        table_columns   = """
+            trip_status_log_id, trip_id, status_code,
+            status_ts, actor_type, created_at
+        """,
+    ),
+
+    # ── trips ──────────────────────────────────────────────────────────────────
+    TableConfig(
+        pg_table        = "trips",
+        bq_final_table  = "trips",
+        merge_key       = "trip_id",
+        partition_field = "request_ts",
+        partition_type  = "MONTH",
+        cluster_fields  = ["city", "trip_status"],
+        source_system   = "ride_ops_pg",
+        append_only     = False,
+        schema_fields   = [
+            {"name": "trip_id",                "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "customer_id",            "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "driver_id",              "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "vehicle_id",             "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "request_ts",             "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "pickup_ts",              "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "dropoff_ts",             "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "pickup_lat",             "type": "FLOAT64",   "mode": "NULLABLE"},
+            {"name": "pickup_lng",             "type": "FLOAT64",   "mode": "NULLABLE"},
+            {"name": "dropoff_lat",            "type": "FLOAT64",   "mode": "NULLABLE"},
+            {"name": "dropoff_lng",            "type": "FLOAT64",   "mode": "NULLABLE"},
+            {"name": "pickup_area",            "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "dropoff_area",           "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "city",                   "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "estimated_distance_km",  "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "actual_distance_km",     "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "estimated_fare",         "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "actual_fare",            "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "surge_multiplier",       "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "trip_status",            "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "cancel_reason",          "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "created_at",             "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "updated_at",             "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_ingested_at",           "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",         "type": "STRING",    "mode": "REQUIRED"},
+        ],
+        table_columns   = """
+            trip_id, customer_id, driver_id, vehicle_id,
+            request_ts, pickup_ts, dropoff_ts,
+            pickup_lat, pickup_lng, dropoff_lat, dropoff_lng,
+            pickup_area, dropoff_area, city,
+            estimated_distance_km, actual_distance_km,
+            estimated_fare, actual_fare, surge_multiplier,
+            trip_status, cancel_reason,
+            created_at, updated_at
+        """,
+    ),
 
 ]
 
