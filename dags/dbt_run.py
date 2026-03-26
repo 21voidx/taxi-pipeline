@@ -103,7 +103,7 @@ with DAG(
                 type="bind",
             ),
             Mount(
-            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            source="/home/void/taxi-pipeline/dbt/dbt_project",  # ← path dbt di host
             target="/usr/app/dbt",                            # ← path di dalam container
             type="bind",
             ),
@@ -126,7 +126,7 @@ with DAG(
                 type="bind",
             ),
             Mount(
-            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            source="/home/void/taxi-pipeline/dbt/dbt_project",  # ← path dbt di host
             target="/usr/app/dbt",                            # ← path di dalam container
             type="bind",
             ),
@@ -149,7 +149,7 @@ with DAG(
                 type="bind",
             ),
             Mount(
-            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            source="/home/void/taxi-pipeline/dbt/dbt_project",  # ← path dbt di host
             target="/usr/app/dbt",                            # ← path di dalam container
             type="bind",
             ),
@@ -172,7 +172,7 @@ with DAG(
                 type="bind",
             ),
             Mount(
-            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            source="/home/void/taxi-pipeline/dbt/dbt_project",  # ← path dbt di host
             target="/usr/app/dbt",                            # ← path di dalam container
             type="bind",
             ),
