@@ -6,7 +6,7 @@ ride_hailing:
       type: bigquery
       method: service-account                      # gcloud auth application-default login
       project: "{{ env_var('GCP_PROJECT_ID') }}"     # ← ganti dengan GCP project ID kamu
-      dataset: dbt_dev                       # dev sandbox, tidak menimpa prod
+      dataset: dev                       # dev sandbox, tidak menimpa prod
       location: "{{ env_var('BQ_LOCATION', 'US') }}"
       keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
       threads: 4
@@ -18,10 +18,10 @@ ride_hailing:
     prod:
       type: bigquery
       method: service-account
-      project: "your-gcp-project-id"        # ← ganti dengan GCP project ID kamu
-      dataset: dbt_prod                      # tidak dipakai (dataset per model di dbt_project.yml)
-      keyfile: /secrets/bigquery-sa-key.json # path ke service account key
-      location: asia-southeast2
+      project: "{{ env_var('GCP_PROJECT_ID') }}"        # ← ganti dengan GCP project ID kamu
+      dataset: prod                      # tidak dipakai (dataset per model di dbt_project.yml)
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
+      location: "{{ env_var('BQ_LOCATION', 'US') }}"
       threads: 8
       timeout_seconds: 1200
       priority: batch

@@ -16,7 +16,7 @@ sources:
       ke BigQuery oleh Airflow. Setiap tabel mencerminkan 1:1 tabel source
       dengan tambahan kolom _ingested_at dan _source_system.
     database: "{{ var('gcp_project') }}"
-    schema:   "{{ var('bronze_pg_dataset') }}"
+    schema:   "{{ target.name }}_{{ var('bronze_pg_dataset') }}"
     loader:   airflow
 
     freshness:

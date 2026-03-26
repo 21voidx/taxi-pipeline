@@ -107,35 +107,35 @@ models:
           +partition_by:
             field:       "created_at"
             data_type:   "timestamp"
-            granularity: "day"
+            granularity: "month"
 
         fct_payment:
           +unique_key:   payment_id
           +partition_by:
             field:       "created_at"
             data_type:   "timestamp"
-            granularity: "day"
+            granularity: "month"
 
         fct_driver_payout:
           +unique_key:   payout_id
           +partition_by:
             field:       "created_at"
             data_type:   "timestamp"
-            granularity: "day"
+            granularity: "month"
 
         fct_rating:
           +unique_key:   rating_id
           +partition_by:
             field:       "created_at"
             data_type:   "timestamp"
-            granularity: "day"
+            granularity: "month"
 
         fct_promo_redemption:
           +unique_key:   redemption_id
           +partition_by:
             field:       "created_at"
             data_type:   "timestamp"
-            granularity: "day"
+            granularity: "month"
 
     # ── Gold ──
     gold:
@@ -154,7 +154,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
           +cluster_by:   ["city"]
 
         dm_trip_hourly_city:
@@ -164,7 +164,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
           +cluster_by:   ["city"]
 
       finance:
@@ -180,7 +180,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
           +cluster_by:   ["city"]
 
         dm_payment_method_daily:
@@ -190,7 +190,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
           +cluster_by:   ["payment_method_name"]
 
       marketing:
@@ -206,7 +206,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
 
         dm_campaign_daily_channel:
           +partition_by:
@@ -215,7 +215,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
           +cluster_by:   ["channel_name"]
 
         dm_customer_segment_daily:
@@ -237,7 +237,7 @@ models:
             range:
               start:     20260101
               end:       20991231
-              interval:  1
+              interval:  100
           +cluster_by:   ["city"]
 
         dm_driver_monthly_summary:
@@ -258,7 +258,7 @@ seeds:
 # ─────────────────────────────────────────────────────────────
 snapshots:
   ride_hailing:
-    +target_schema: "silver_core"
+    +schema: "silver_snapshots"
     +tags:          ["snapshot", "scd2"]
     +strategy:      "timestamp"
     +updated_at:    "updated_at"

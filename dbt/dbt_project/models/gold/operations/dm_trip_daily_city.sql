@@ -10,7 +10,7 @@
         partition_by = {
             'field'   : 'date_key',
             'data_type': 'int64',
-            'range'   : {'start': 20260101, 'end': 20991231, 'interval': 1}
+            'range'   : {'start': 20260101, 'end': 20991231, 'interval': 100}
         },
         cluster_by   = ['city']
     )

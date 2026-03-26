@@ -2,7 +2,6 @@
 
 {{
     config(
-        target_schema = 'silver_core',
         unique_key    = 'driver_id',
         strategy      = 'timestamp',
         updated_at    = 'updated_at',
