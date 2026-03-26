@@ -39,7 +39,7 @@ default_args = {
 # ─── DAG ──────────────────────────────────────────────────────────────────────
 
 with DAG(
-    dag_id="dbt_run",
+    dag_id="dbt_run_v2",
     description=(
         "dbt DockerOperator pipeline: debug, deps, seed, snapshot, run (silver), run (gold). "
     ),
