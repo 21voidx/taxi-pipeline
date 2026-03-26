@@ -398,31 +398,31 @@ services:
       redis:
         condition: service_healthy
 
-  # data-generator:
-  #   build:
-  #     context: ./data-generator/generator
-  #     dockerfile: Dockerfile
-  #     network: host
-  #   container_name: Taxi-data-generator
-  #   environment:
-  #     POSTGRES_HOST: postgres-ops
-  #     POSTGRES_PORT: 5432
-  #     POSTGRES_DB: ride_ops_pg
-  #     POSTGRES_USER: ${POSTGRES_USER}
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  #     MYSQL_HOST: mysql
-  #     MYSQL_PORT: 3306
-  #     MYSQL_DB: ride_marketing_mysql
-  #     MYSQL_USER: ${MYSQL_USER}
-  #     MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-  #   depends_on:
-  #     postgres-ops:
-  #       condition: service_healthy
-  #     mysql:
-  #       condition: service_healthy
-  #   networks:
-  #     - taxi-network
-  #   restart: "no"
+  data-generator:
+    build:
+      context: ./data-generator/generator
+      dockerfile: Dockerfile
+      network: host
+    container_name: Taxi-data-generator
+    environment:
+      POSTGRES_HOST: postgres-ops
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ride_ops_pg
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: ride_marketing_mysql
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    depends_on:
+      postgres-ops:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - taxi-network
+    restart: "no"
 
 volumes:
   postgres-ops-data:
