@@ -14,7 +14,7 @@ COPY dbt_project/dbt_project.yml /app/dbt_project.yml
 
 ENV DBT_PROJECT_DIR=/app
 ENV DBT_PROFILES_DIR=/root/.dbt
-ENV DBT_PACKAGES_INSTALL_PATH=/dbt_packages   # ← via env var
+ENV DBT_PACKAGES_INSTALL_PATH=/dbt_packages
 
 RUN dbt deps
 
