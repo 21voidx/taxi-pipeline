@@ -92,6 +92,7 @@ with DAG(
         image="dbt-project-taxi:1.0",
         command='dbt seed --target dev',
         auto_remove="force", # 'never', 'success', or 'force'
+        mount_tmp_dir=False,
         environment={
             "GCP_PROJECT_ID": "taxi-pipeline-123",
             "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
@@ -115,6 +116,7 @@ with DAG(
         image="dbt-project-taxi:1.0",
         command='dbt snapshot --target dev',
         auto_remove="force", # 'never', 'success', or 'force'
+        mount_tmp_dir=False,
         environment={
             "GCP_PROJECT_ID": "taxi-pipeline-123",
             "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
@@ -138,6 +140,7 @@ with DAG(
         image="dbt-project-taxi:1.0",
         command='dbt run --select tag:silver --target dev',
         auto_remove="force", # 'never', 'success', or 'force'
+        mount_tmp_dir=False,
         environment={
             "GCP_PROJECT_ID": "taxi-pipeline-123",
             "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
@@ -161,6 +164,7 @@ with DAG(
         image="dbt-project-taxi:1.0",
         command='dbt run --select tag:gold --target dev',
         auto_remove="force", # 'never', 'success', or 'force'
+        mount_tmp_dir=False,
         environment={
             "GCP_PROJECT_ID": "taxi-pipeline-123",
             "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
