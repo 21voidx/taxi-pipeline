@@ -102,6 +102,11 @@ with DAG(
                 target="/opt/gcp/service-account.json",
                 type="bind",
             ),
+            Mount(
+            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            target="/usr/app/dbt",                            # ← path di dalam container
+            type="bind",
+            ),
         ],
     )
 
@@ -119,6 +124,11 @@ with DAG(
                 source="/home/void/taxi-pipeline/credentials/service-account.json",
                 target="/opt/gcp/service-account.json",
                 type="bind",
+            ),
+            Mount(
+            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            target="/usr/app/dbt",                            # ← path di dalam container
+            type="bind",
             ),
         ],
     )
@@ -138,6 +148,11 @@ with DAG(
                 target="/opt/gcp/service-account.json",
                 type="bind",
             ),
+            Mount(
+            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            target="/usr/app/dbt",                            # ← path di dalam container
+            type="bind",
+            ),
         ],
     )
 
@@ -155,6 +170,11 @@ with DAG(
                 source="/home/void/taxi-pipeline/credentials/service-account.json",
                 target="/opt/gcp/service-account.json",
                 type="bind",
+            ),
+            Mount(
+            source="/home/void/taxi-pipeline/dbt/taxi_dbt",  # ← path dbt di host
+            target="/usr/app/dbt",                            # ← path di dalam container
+            type="bind",
             ),
         ],
     )
