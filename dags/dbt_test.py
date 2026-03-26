@@ -41,8 +41,7 @@ default_args = {
 with DAG(
     dag_id="dbt_run",
     description=(
-        "dbt BashOperator pipeline: source freshness → staging → marts → snapshots. "
-        "Dijalankan setelah dag_core_banking dan dag_transactions selesai."
+        "dbt DockerOperator pipeline: debug, deps, seed, snapshot, run (silver), run (gold). "
     ),
     schedule="@once",
     start_date=pendulum.datetime(2026, 3, 11, tz="Asia/Jakarta"),
