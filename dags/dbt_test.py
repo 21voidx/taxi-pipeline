@@ -51,23 +51,23 @@ with DAG(
     default_args=default_args,
     doc_md=__doc__
 ) as dag:
-    dbt_debug = DockerOperator(
-        task_id="dbt_debug",
-        image="dbt-project-taxi:1.0",
-        command='dbt debug --target dev',
-        auto_remove="force", # 'never', 'success', or 'force'
-        environment={
-            "GCP_PROJECT_ID": "taxi-pipeline-123",
-            "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
-        },
-        mounts=[
-            Mount(
-                source="/home/void/taxi-pipeline/credentials/service-account.json",
-                target="/opt/gcp/service-account.json",
-                type="bind",
-            ),
-        ],
-    )
+    # dbt_debug = DockerOperator(
+    #     task_id="dbt_debug",
+    #     image="dbt-project-taxi:1.0",
+    #     command='dbt debug --target dev',
+    #     auto_remove="force", # 'never', 'success', or 'force'
+    #     environment={
+    #         "GCP_PROJECT_ID": "taxi-pipeline-123",
+    #         "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
+    #     },
+    #     mounts=[
+    #         Mount(
+    #             source="/home/void/taxi-pipeline/credentials/service-account.json",
+    #             target="/opt/gcp/service-account.json",
+    #             type="bind",
+    #         ),
+    #     ],
+    # )
 
     # dbt_deps = DockerOperator(
     #     task_id="dbt_deps",
@@ -159,7 +159,8 @@ with DAG(
         ],
     )
 
-    dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
+    # dbt_debug >> 
+    dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
 
     
 
