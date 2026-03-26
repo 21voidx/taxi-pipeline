@@ -34,7 +34,7 @@ default_args = {
 # ─── Shared config ────────────────────────────────────────────────────────────
 
 DOCKER_COMMON = dict(
-    image          = "dbt-project-taxi:1.0",
+    image          = "dbt-project-taxi:2.0",
     auto_remove    = "force",
     mount_tmp_dir  = False,           # ← fix: cegah error /tmp/airflowtmp tidak ada
     environment    = {
