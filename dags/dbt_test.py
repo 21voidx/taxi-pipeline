@@ -39,7 +39,7 @@ default_args = {
 # ─── DAG ──────────────────────────────────────────────────────────────────────
 
 with DAG(
-    dag_id="dbt_test",
+    dag_id="dbt_run",
     description=(
         "dbt BashOperator pipeline: source freshness → staging → marts → snapshots. "
         "Dijalankan setelah dag_core_banking dan dag_transactions selesai."
@@ -52,8 +52,8 @@ with DAG(
     default_args=default_args,
     doc_md=__doc__
 ) as dag:
-    dbt_run = DockerOperator(
-        task_id="dbt_run",
+    dbt_debug = DockerOperator(
+        task_id="dbt_debug",
         image="dbt-project-taxi:1.0",
         command='dbt debug --target dev',
         auto_remove="force", # 'never', 'success', or 'force'
@@ -69,3 +69,100 @@ with DAG(
             ),
         ],
     )
+
+    # dbt_deps = DockerOperator(
+    #     task_id="dbt_deps",
+    #     image="dbt-project-taxi:1.0",
+    #     command='dbt deps --target dev',
+    #     auto_remove="force", # 'never', 'success', or 'force'
+    #     environment={
+    #         "GCP_PROJECT_ID": "taxi-pipeline-123",
+    #         "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
+    #     },
+    #     mounts=[
+    #         Mount(
+    #             source="/home/void/taxi-pipeline/credentials/service-account.json",
+    #             target="/opt/gcp/service-account.json",
+    #             type="bind",
+    #         ),
+    #     ],
+    # )
+
+    dbt_seed = DockerOperator(
+        task_id="dbt_seed",
+        image="dbt-project-taxi:1.0",
+        command='dbt seed --target dev',
+        auto_remove="force", # 'never', 'success', or 'force'
+        environment={
+            "GCP_PROJECT_ID": "taxi-pipeline-123",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
+        },
+        mounts=[
+            Mount(
+                source="/home/void/taxi-pipeline/credentials/service-account.json",
+                target="/opt/gcp/service-account.json",
+                type="bind",
+            ),
+        ],
+    )
+
+    dbt_snapshot = DockerOperator(
+        task_id="dbt_snapshot",
+        image="dbt-project-taxi:1.0",
+        command='dbt snapshot --target dev',
+        auto_remove="force", # 'never', 'success', or 'force'
+        environment={
+            "GCP_PROJECT_ID": "taxi-pipeline-123",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
+        },
+        mounts=[
+            Mount(
+                source="/home/void/taxi-pipeline/credentials/service-account.json",
+                target="/opt/gcp/service-account.json",
+                type="bind",
+            ),
+        ],
+    )
+
+    dbt_run_silver = DockerOperator(
+        task_id="dbt_run_silver",
+        image="dbt-project-taxi:1.0",
+        command='dbt run --select tag:silver --target dev',
+        auto_remove="force", # 'never', 'success', or 'force'
+        environment={
+            "GCP_PROJECT_ID": "taxi-pipeline-123",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
+        },
+        mounts=[
+            Mount(
+                source="/home/void/taxi-pipeline/credentials/service-account.json",
+                target="/opt/gcp/service-account.json",
+                type="bind",
+            ),
+        ],
+    )
+
+    dbt_run_gold = DockerOperator(
+        task_id="dbt_run_gold",
+        image="dbt-project-taxi:1.0",
+        command='dbt run --select tag:gold --target dev',
+        auto_remove="force", # 'never', 'success', or 'force'
+        environment={
+            "GCP_PROJECT_ID": "taxi-pipeline-123",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/opt/gcp/service-account.json",
+        },
+        mounts=[
+            Mount(
+                source="/home/void/taxi-pipeline/credentials/service-account.json",
+                target="/opt/gcp/service-account.json",
+                type="bind",
+            ),
+        ],
+    )
+
+    dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
+
+    
+
+
+

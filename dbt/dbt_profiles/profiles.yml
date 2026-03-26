@@ -9,7 +9,7 @@ ride_hailing:
       dataset: dev                       # dev sandbox, tidak menimpa prod
       location: "{{ env_var('BQ_LOCATION', 'US') }}"
       keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
-      threads: 4
+      threads: 8
       timeout_seconds: 300
       priority: interactive
       retries: 2
@@ -26,3 +26,4 @@ ride_hailing:
       timeout_seconds: 1200
       priority: batch
       retries: 3
+      maximum_bytes_billed: 50000000000   # 50 GB safety limit for dev
