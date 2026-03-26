@@ -9,34 +9,30 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY dbt_profiles/ /root/.dbt/
 
 WORKDIR /app
-
-# ── Copy packages.yml DULU sebelum project ──────────────────
 COPY dbt_project/packages.yml /app/packages.yml
 COPY dbt_project/dbt_project.yml /app/dbt_project.yml
-
-# Install deps — layer ini hanya re-run kalau packages.yml berubah
-RUN dbt deps
-
-# ── Copy sisa project SETELAH deps ──────────────────────────
-# Layer ini sering berubah (edit SQL, YAML, dll) tapi tidak
-# trigger dbt deps ulang
-COPY dbt_project/ /app
 
 ENV DBT_PROJECT_DIR=/app
 ENV DBT_PROFILES_DIR=/root/.dbt
 
+# Install ke /dbt_packages — tidak akan tertimpa volume mount /app
+RUN dbt deps --packages-install-path /dbt_packages
+
+COPY dbt_project/ /app
+
 CMD ["dbt", "--version"]
 
-## Perbandingan Build Time
+# docker build
+#     ↓
+# /dbt_packages/          ← packages di-install di sini (di dalam image)
+#     ├── dbt_utils/
+#     ├── audit_helper/
+#     ├── dbt_expectations/
+#     └── dbt_project_evaluator/
 
-# Tanpa optimasi — edit 1 file SQL:
-#   COPY dbt_project/  → cache MISS (ada file berubah)
-#   dbt deps           → re-run (~2-3 menit download packages)
-#   Total: ~3 menit
+# Mount volume /app       ← hanya overwrite project files
+#     ├── models/
+#     ├── macros/
+#     └── dbt_project.yml ← packages-install-path: /dbt_packages
 
-# Dengan optimasi — edit 1 file SQL:
-#   COPY packages.yml  → cache HIT (tidak berubah)
-#   dbt deps           → cache HIT (skip!)
-#   COPY dbt_project/  → cache MISS (ada file berubah)
-#   Total: ~10 detik 
-#   
+# dbt run                 ← baca packages dari /dbt_packages 

@@ -3,7 +3,7 @@ version: "1.0.0"
 config-version: 2
 
 profile: "ride_hailing"
-
+packages-install-path: /dbt_packages
 # ─────────────────────────────────────────────────────────────
 # Paths
 # ─────────────────────────────────────────────────────────────
