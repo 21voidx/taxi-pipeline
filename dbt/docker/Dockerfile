@@ -14,14 +14,13 @@ COPY dbt_project/dbt_project.yml /app/dbt_project.yml
 
 ENV DBT_PROJECT_DIR=/app
 ENV DBT_PROFILES_DIR=/root/.dbt
+ENV DBT_PACKAGES_INSTALL_PATH=/dbt_packages   # ← via env var
 
-# Install ke /dbt_packages — tidak akan tertimpa volume mount /app
-RUN dbt deps --packages-install-path /dbt_packages
+RUN dbt deps
 
 COPY dbt_project/ /app
 
 CMD ["dbt", "--version"]
-
 # docker build
 #     ↓
 # /dbt_packages/          ← packages di-install di sini (di dalam image)
