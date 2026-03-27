@@ -48,11 +48,11 @@ DOCKER_COMMON = dict(
             type   = "bind",
         ),
         # Uncomment baris di bawah untuk development (mount volume = tidak perlu rebuild image)
-        Mount(
-            source = "/home/void/taxi-pipeline/dbt/dbt_project",  # ← folder dbt_project di host
-            target = "/app",                                   # ← WORKDIR di container
-            type   = "bind",
-        ),
+        # Mount(
+        #     source = "/home/void/taxi-pipeline/dbt/dbt_project",  # ← folder dbt_project di host
+        #     target = "/app",                                   # ← WORKDIR di container
+        #     type   = "bind",
+        # ),
     ],
 )
 
@@ -68,6 +68,11 @@ with DAG(
     tags        = ["dbt", "bigquery", "transformation"],
     default_args = default_args,
 ) as dag:
+    dbt_debug = DockerOperator(
+        task_id = "dbt_debug",
+        command = f"dbt debug --target {DBT_TARGET}",
+        **DOCKER_COMMON,
+    )
 
     dbt_seed = DockerOperator(
         task_id = "dbt_seed",
