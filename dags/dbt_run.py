@@ -20,6 +20,8 @@ SA_KEY_CONTAINER = "/opt/gcp/service-account.json"
 
 DBT_TARGET = os.getenv("DBT_TARGET", "dev")
 
+DBT_BASE = f"--project-dir /app --profiles-dir /root/.dbt --target {DBT_TARGET}"
+
 default_args = {
     "owner":             "data-engineering",
     "depends_on_past":   False,
@@ -68,33 +70,34 @@ with DAG(
     tags        = ["dbt", "bigquery", "transformation"],
     default_args = default_args,
 ) as dag:
+
     dbt_debug = DockerOperator(
         task_id = "dbt_debug",
-        command = f"dbt debug --target {DBT_TARGET}",
+        command = f"dbt debug {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
     dbt_seed = DockerOperator(
         task_id = "dbt_seed",
-        command = f"dbt seed --target {DBT_TARGET}",
+        command = f"dbt seed {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
     dbt_snapshot = DockerOperator(
         task_id = "dbt_snapshot",
-        command = f"dbt snapshot --target {DBT_TARGET}",
+        command = f"dbt snapshot {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
     dbt_run_silver = DockerOperator(
         task_id = "dbt_run_silver",
-        command = f"dbt run --select tag:silver --target {DBT_TARGET}",
+        command = f"dbt run --select tag:silver {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
     dbt_run_gold = DockerOperator(
         task_id = "dbt_run_gold",
-        command = f"dbt run --select tag:gold --target {DBT_TARGET}",
+        command = f"dbt run --select tag:gold {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
