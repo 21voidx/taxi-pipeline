@@ -48,11 +48,11 @@ DOCKER_COMMON = dict(
             type   = "bind",
         ),
         # Uncomment baris di bawah untuk development (mount volume = tidak perlu rebuild image)
-        Mount(
-            source = "/home/void/taxi-pipeline/dbt/dbt_project",  # ← folder dbt_project di host
-            target = "/app",                                   # ← WORKDIR di container
-            type   = "bind",
-        ),
+    #     Mount(
+    #         source = "/home/void/taxi-pipeline/dbt/dbt_project",  # ← folder dbt_project di host
+    #         target = "/app",                                   # ← WORKDIR di container
+    #         type   = "bind",
+    #     ),
     ],
 )
 
