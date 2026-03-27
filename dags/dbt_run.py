@@ -98,4 +98,4 @@ with DAG(
         **DOCKER_COMMON,
     )
 
-    dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
+    dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
