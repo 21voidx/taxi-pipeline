@@ -39,6 +39,7 @@ DOCKER_COMMON = dict(
     image          = "dbt-project-taxi:1.0",
     auto_remove    = "force",
     mount_tmp_dir  = False,           # ← fix: cegah error /tmp/airflowtmp tidak ada
+    network_mode   = "host",
     environment    = {
         "GCP_PROJECT_ID":                "taxi-pipeline-123",
         "GOOGLE_APPLICATION_CREDENTIALS": SA_KEY_CONTAINER,
