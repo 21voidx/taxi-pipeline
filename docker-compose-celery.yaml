@@ -88,7 +88,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - taxi-network
 
@@ -112,8 +112,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ride_ops_pg"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 120s
     networks:
       - taxi-network
 
@@ -136,8 +136,8 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 90s
+      retries: 10
+      start_period: 120s
     networks:
       - taxi-network
     labels:
@@ -168,7 +168,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 60s
+      start_period: 180s
     depends_on:
       postgres-ops:
         condition: service_healthy
