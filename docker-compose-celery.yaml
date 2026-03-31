@@ -422,7 +422,6 @@ services:
         condition: service_healthy
     networks:
       - taxi-network
-    restart: "no"
 
 volumes:
   postgres-ops-data:
