@@ -113,7 +113,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 120s
+      start_period: 90s
     networks:
       - taxi-network
 
@@ -137,7 +137,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 120s
+      start_period: 90s
     networks:
       - taxi-network
     labels:
@@ -168,7 +168,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 180s
+      start_period: 120s
     depends_on:
       postgres-ops:
         condition: service_healthy
