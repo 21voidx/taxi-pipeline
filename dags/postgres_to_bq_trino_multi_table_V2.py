@@ -268,7 +268,7 @@ TABLE_CONFIGS = [
             {"name": "event_id",         "type": "STRING",    "mode": "REQUIRED"},
             {"name": "ride_id",          "type": "STRING",    "mode": "REQUIRED"},
             {"name": "event_type",       "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "event_payload",    "type": "JSON",      "mode": "NULLABLE"},
+            {"name": "event_payload",    "type": "STRING",    "mode": "NULLABLE"},
             {"name": "occurred_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
             {"name": "_ingested_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
             {"name": "_source_system",   "type": "STRING",    "mode": "REQUIRED"},
