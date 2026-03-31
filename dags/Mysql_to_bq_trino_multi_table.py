@@ -128,8 +128,7 @@ TABLE_CONFIGS = [
             payment_id, payment_code, ride_id, passenger_id, method_id,
             amount, platform_fee, driver_earning, promo_discount, currency,
             payment_status, payment_gateway, gateway_ref, gateway_raw_response,
-            paid_at, expired_at, refunded_at, refund_reason, created_at, updated_at,
-            _source_system
+            paid_at, expired_at, refunded_at, refund_reason, created_at, updated_at
         """,
     ),
 
@@ -194,7 +193,7 @@ TABLE_CONFIGS = [
         ],
         table_columns   = """
             usage_id, promo_id, passenger_id, ride_id,
-            discount_given, used_at, _source_system
+            discount_given, used_at
         """,
     ),
 
@@ -225,7 +224,7 @@ TABLE_CONFIGS = [
         table_columns   = """
             incentive_id, driver_id, incentive_type, reference_id,
             amount, description, period_date, is_paid, paid_at,
-            created_at, _source_system
+            created_at
         """,
     ),
 ]
