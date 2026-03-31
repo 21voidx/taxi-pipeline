@@ -263,8 +263,8 @@ WITH ranked AS (
             ORDER BY src.{partition_field} DESC
         ) AS _rn
     FROM {trino_pg_catalog}.{pg_schema}.{pg_source_table} AS src
-    WHERE src.{partition_field} >= TIMESTAMP '{{{{ dag_run.conf.get("window_start") or data_interval_start.in_timezone("{source_tz}").isoformat() }}}}'
-      AND src.{partition_field} <  TIMESTAMP '{{{{ dag_run.conf.get("window_end")   or data_interval_end.in_timezone("{source_tz}").isoformat() }}}}'
+    WHERE src.{partition_field} >= TIMESTAMP '{{{{ dag_run.conf.get("window_start") or data_interval_start.in_timezone("{source_tz}").strftime("%Y-%m-%d %H:%M:%S") }}}}'
+      AND src.{partition_field} <  TIMESTAMP '{{{{ dag_run.conf.get("window_end")   or data_interval_end.in_timezone("{source_tz}").strftime("%Y-%m-%d %H:%M:%S") }}}}'
 )
 SELECT {final_cols}
 FROM   ranked
