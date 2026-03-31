@@ -31,11 +31,11 @@ console = Console()
 #  CONFIG
 # ─────────────────────────────────────────
 PG_CONFIG = {
-    "host":     os.getenv("PG_HOST",     "postgres-ops"),
-    "port":     int(os.getenv("PG_PORT", "5432")),
-    "database": os.getenv("PG_DB",       "ride_ops_pg"),
-    "user":     os.getenv("PG_USER",     "postgres"),
-    "password": os.getenv("PG_PASSWORD", "postgres"),
+    "host":     os.getenv("POSTGRES_HOST",     "postgres-ops"),
+    "port":     int(os.getenv("POSTGRES_PORT", "5432")),
+    "database": os.getenv("POSTGRES_DB",       "ride_ops_pg"),
+    "user":     os.getenv("POSTGRES_USER",     "postgres"),
+    "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
 }
 
 MYSQL_CONFIG = {
