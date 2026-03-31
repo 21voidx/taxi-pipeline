@@ -214,6 +214,7 @@ def make_table_task_group(
                 source_tz=source_tz,
             ),
             autocommit=True,
+            do_xcom_push=False,
             outlets=[bq_temp_asset],
         )
 
