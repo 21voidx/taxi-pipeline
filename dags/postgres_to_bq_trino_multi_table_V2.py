@@ -262,6 +262,7 @@ TABLE_CONFIGS = [
         partition_field = "occurred_at",
         partition_type  = "DAY",
         cluster_fields  = ["event_type", "ride_id"],
+        json_fields     = ["event_payload"],
         source_system   = "ride_ops_pg",
         append_only     = True,
         schema_fields   = [

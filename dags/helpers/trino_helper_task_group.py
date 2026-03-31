@@ -86,6 +86,7 @@ class TableConfig:
     partition_type  : str               = "MONTH"      # DAY | MONTH | YEAR
     cluster_fields  : list[str]         = field(default_factory=list)
     append_only     : bool              = False
+    json_fields     : list[str]         = field(default_factory=list)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -98,25 +98,38 @@ def parse_columns(table_columns_str: str, schema_lookup: dict[str, str]) -> list
     return columns
 
 
-def build_trino_columns(columns: list[str], schema_lookup: dict[str, str]) -> list[str]:
+def build_trino_columns(columns: list[str], schema_lookup: dict[str, str],json_columns: list[str] = None) -> list[str]:
     """
     Build list Trino SELECT expressions dengan CAST yang tepat.
 
-    Kolom bertipe INTEGER atau STRING di BQ perlu di-CAST eksplisit karena
-    Trino memetakan tipe PG dan BQ secara berbeda (lihat BQ_TO_TRINO_CAST).
-    Tipe lain (DATE, TIMESTAMP, BOOLEAN, FLOAT, NUMERIC) sudah cocok → tidak perlu CAST.
+    - Kolom bertipe JSON (dari Postgres) wajib dibungkus dengan json_format() 
+      agar tidak terjadi error INVALID_CAST_ARGUMENT saat dipindahkan ke STRING BQ.
+    - Kolom bertipe INTEGER atau STRING di BQ perlu di-CAST eksplisit karena
+      Trino memetakan tipe PG dan BQ secara berbeda (lihat BQ_TO_TRINO_CAST).
+    - Tipe lain (DATE, TIMESTAMP, BOOLEAN, FLOAT, NUMERIC) sudah cocok → tidak perlu CAST.
 
         columns       : list nama kolom dari parse_columns()
         schema_lookup : dict {col_name: bq_type} dari SCHEMA_FIELDS
+        json_columns  : list nama kolom yang bertipe JSON asli dari Postgres (opsional)
     """
-    return [
-        (
-            f"CAST(src.{col} AS {BQ_TO_TRINO_CAST[schema_lookup[col]]}) AS {col}"
-            if schema_lookup[col] in BQ_TO_TRINO_CAST
-            else f"src.{col}"
-        )
-        for col in columns
-    ]
+    if json_columns is None:
+        json_columns = []
+
+    result = []
+    for col in columns:
+        # 1. Cek apakah ini kolom JSON dari Postgres
+        if col in json_columns:
+            result.append(f"json_format(src.{col}) AS {col}")
+            
+        # 2. Cek apakah perlu di-CAST normal (String/Integer)
+        elif schema_lookup.get(col) in BQ_TO_TRINO_CAST:
+            result.append(f"CAST(src.{col} AS {BQ_TO_TRINO_CAST[schema_lookup[col]]}) AS {col}")
+            
+        # 3. Kolom standar (Date, Timestamp, dll)
+        else:
+            result.append(f"src.{col}")
+            
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
