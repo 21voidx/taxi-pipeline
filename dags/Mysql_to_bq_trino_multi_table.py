@@ -24,7 +24,7 @@ import pendulum
 from airflow import DAG
 from airflow.models.param import Param
 from airflow.timetables.interval import CronDataIntervalTimetable
-from helpers.trino_helper_task_group import TableConfig, make_table_task_group
+from helpers.trino_helper_task_group_v2 import TableConfig, make_table_task_group
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  GLOBAL CONFIG
