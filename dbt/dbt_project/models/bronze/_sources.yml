@@ -1,0 +1,107 @@
+version: 2
+
+sources:
+
+  # ── PostgreSQL → BigQuery (via Airbyte / Fivetran) ─────────────
+  - name: postgres_raw
+    description: "Raw tables dari PostgreSQL taxi_oltp yang di-load ke BigQuery"
+    database: "{{ var('gcp_project') }}"
+    schema:   "{{ var('bronze_pg_dataset') }}"
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after:  {count: 1, period: hour}
+      error_after: {count: 6, period: hour}
+
+    tables:
+      - name: rides
+        description: "Transaksi ride hailing — satu baris per perjalanan"
+        columns:
+          - name: ride_id
+            tests: [unique, not_null]
+          - name: ride_status
+            tests:
+              - accepted_values:
+                  values: ['REQUESTED','ACCEPTED','PICKED_UP','COMPLETED','CANCELLED','NO_DRIVER']
+          - name: updated_at
+            tests: [not_null]
+
+      - name: drivers
+        description: "Profil pengemudi — data kotor (NIK, phone, plate raw)"
+        columns:
+          - name: driver_id
+            tests: [unique, not_null]
+          - name: status
+            tests:
+              - accepted_values:
+                  values: ['ACTIVE','INACTIVE','SUSPENDED','PENDING']
+
+      - name: passengers
+        description: "Profil penumpang"
+        columns:
+          - name: passenger_id
+            tests: [unique, not_null]
+
+      - name: zones
+        description: "Lookup 10 zona Jabodetabek"
+        columns:
+          - name: zone_id
+            tests: [unique, not_null]
+          - name: zone_code
+            tests: [unique, not_null]
+
+      - name: vehicle_types
+        description: "Konfigurasi tarif per kelas kendaraan"
+        columns:
+          - name: vehicle_type_id
+            tests: [unique, not_null]
+
+      - name: ride_events
+        description: "CDC event log per ride state transition"
+        columns:
+          - name: event_id
+            tests: [unique, not_null]
+
+  # ── MySQL → BigQuery (via Airbyte / Fivetran) ──────────────────
+  - name: mysql_raw
+    description: "Raw tables dari MySQL taxi_payments yang di-load ke BigQuery"
+    database: "{{ var('gcp_project') }}"
+    schema:   "{{ var('bronze_mysql_dataset') }}"
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after:  {count: 1, period: hour}
+      error_after: {count: 6, period: hour}
+
+    tables:
+      - name: payments
+        description: "Satu pembayaran per ride; kolom gateway_raw_response berisi JSON kotor"
+        columns:
+          - name: payment_id
+            tests: [unique, not_null]
+          - name: payment_status
+            tests:
+              - accepted_values:
+                  values: ['PENDING','SUCCESS','FAILED','REFUNDED','EXPIRED']
+
+      - name: payment_methods
+        description: "10 channel pembayaran (OVO, GoPay, DANA, CASH, dll.)"
+        columns:
+          - name: method_id
+            tests: [unique, not_null]
+
+      - name: promotions
+        description: "Katalog promo aktif"
+        columns:
+          - name: promo_id
+            tests: [unique, not_null]
+
+      - name: promo_usage
+        description: "Pemakaian promo per ride"
+        columns:
+          - name: usage_id
+            tests: [unique, not_null]
+
+      - name: driver_incentives
+        description: "Ledger bonus/insentif pengemudi"
+        columns:
+          - name: incentive_id
+            tests: [unique, not_null]

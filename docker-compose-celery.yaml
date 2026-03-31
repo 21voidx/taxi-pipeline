@@ -16,40 +16,14 @@
 # under the License.
 #
 
-# Basic Airflow cluster configuration for CeleryExecutor with Redis and PostgreSQL.
-#
-# WARNING: This configuration is for local development. Do not use it in a production deployment.
-#
-# This configuration supports basic configuration using environment variables or an .env file
-# The following variables are supported:
-#
-# AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:3.0.6
-# AIRFLOW_UID                  - User ID in Airflow containers
-#                                Default: 50000
-# AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
-#                                Default: .
-# Those configurations are useful mostly in case of standalone testing/running Airflow in test/try-out mode
-#
-# _AIRFLOW_WWW_USER_USERNAME   - Username for the administrator account (if requested).
-#                                Default: airflow
-# _AIRFLOW_WWW_USER_PASSWORD   - Password for the administrator account (if requested).
-#                                Default: airflow
-# _PIP_ADDITIONAL_REQUIREMENTS - Additional PIP requirements to add when starting all containers.
-#                                Use this option ONLY for quick checks. Installing requirements at container
-#                                startup is done EVERY TIME the service is started.
-#                                A better way is to build a custom image or extend the official image
-#                                as described in https://airflow.apache.org/docs/docker-stack/build.html.
-#                                Default: ''
-#
-# Feel free to modify this file to suit your needs.
+# Airflow cluster configuration for CeleryExecutor with Redis and PostgreSQL.
+# This version moves Airflow services to host networking to bypass the Docker
+# bridge path for outbound HTTPS, while keeping supporting services on the
+# Docker bridge network.
+
 ---
 x-airflow-common:
   &airflow-common
-  # In order to add custom dependencies or upgrade provider distributions you can use your extended image.
-  # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
-  # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.6}
   build:
     context: .
     dockerfile: Dockerfile
@@ -58,25 +32,18 @@ x-airflow-common:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__AUTH_MANAGER: 'airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager'
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: 'postgresql+psycopg2://airflow:airflow@postgres/airflow'
-    AIRFLOW__CELERY__RESULT_BACKEND: 'db+postgresql://airflow:airflow@postgres/airflow'
-    AIRFLOW__CELERY__BROKER_URL: 'redis://:@redis:6379/0'
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: 'postgresql+psycopg2://airflow:airflow@127.0.0.1:5432/airflow'
+    AIRFLOW__CELERY__RESULT_BACKEND: 'db+postgresql://airflow:airflow@127.0.0.1:5432/airflow'
+    AIRFLOW__CELERY__BROKER_URL: 'redis://:@127.0.0.1:6379/0'
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
     AIRFLOW__CORE__SECRET_KEY: ${AIRFLOW__CORE__SECRET_KEY}
     AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET}
-    AIRFLOW__CORE__HOSTNAME_CALLABLE: 'airflow.utils.net.get_host_ip_address'
+    AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.getfqdn"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
-    # yamllint disable rule:line-length
-    # Use simple http server on scheduler for health checks
-    # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
-    # yamllint enable rule:line-length
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://127.0.0.1:8080/execution/'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
-    # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
-    # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
     GOOGLE_APPLICATION_CREDENTIALS: /opt/gcp/service-account.json
   volumes:
@@ -104,13 +71,8 @@ x-airflow-common:
       condition: service_healthy
     redis:
       condition: service_healthy
-  networks:
-  - taxi-network
 
 services:
-  # ─────────────────────────────────────────────
-  # Airflow — PostgreSQL metadata DB
-  # ─────────────────────────────────────────────
   postgres:
     image: postgres:14-alpine
     container_name: postgres
@@ -118,6 +80,8 @@ services:
       POSTGRES_DB: airflow
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
+    ports:
+      - "5432:5432"
     volumes:
       - airflow-db-data:/var/lib/postgresql/data
     healthcheck:
@@ -128,10 +92,6 @@ services:
     networks:
       - taxi-network
 
-  # ─────────────────────────────────────────────
-  # Trino — Query Federation Engine
-  # Connects: PostgreSQL + MySQL + BigQuery
-  # ─────────────────────────────────────────────
   postgres-ops:
     image: postgres:14-alpine
     container_name: taxi-postgres-ops
@@ -157,11 +117,6 @@ services:
     networks:
       - taxi-network
 
-  # ─────────────────────────────────────────────
-  # MySQL 8.0 — Transaction System
-  # Pre-configured for CDC (binlog ROW format)
-  # DBeaver access: jdbc:trino://localhost:8081?user=trino
-  # ─────────────────────────────────────────────
   mysql:
     image: mysql:8-debian
     container_name: taxi-mysql
@@ -176,8 +131,6 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./data-generator/mysql/init.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      # NOTE: file must be chmod 644 on host — MySQL ignores world-writable configs.
-      # Run once: chmod 644 infrastructure/configs/mysql.cnf
       - ./trino/mysql.cnf:/etc/mysql/conf.d/taxi.cnf
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
@@ -194,22 +147,24 @@ services:
   trino:
     image: trinodb/trino:477
     container_name: taxi-trino
+    network_mode: host
     ports:
       - "8081:8080"
     volumes:
       - ./trino/catalog:/etc/trino/catalog
       - ./trino/etc/jvm.config:/etc/trino/jvm.config
+      - ./trino/etc/config.properties:/etc/trino/config.properties
       - ./credentials/service-account.json:/opt/gcp/service-account.json:ro
     environment:
-      POSTGRES_HOST: postgres-ops
+      POSTGRES_HOST: 127.0.0.1
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      MYSQL_HOST: mysql
+      MYSQL_HOST: 127.0.0.1
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/v1/info"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -219,15 +174,11 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
-    networks:
-      - taxi-network
 
   redis:
-    # Redis is limited to 7.2-bookworm due to licencing change
-    # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
     image: redis:7.2-bookworm
-    expose:
-      - 6379
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -238,15 +189,11 @@ services:
     networks:
       - taxi-network
 
-  # ─────────────────────────────────────────────
-  # Airflow Apiserver
-  # ─────────────────────────────────────────────
   airflow-apiserver:
     <<: *airflow-common
     container_name: taxi-airflow-apiserver
     command: api-server
-    ports:
-      - "8080:8080"
+    network_mode: host
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
       interval: 30s
@@ -258,16 +205,12 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - taxi-network
 
-  # ─────────────────────────────────────────────
-  # Airflow Scheduler
-  # ─────────────────────────────────────────────
   airflow-scheduler:
     <<: *airflow-common
     container_name: taxi-airflow-scheduler
     command: scheduler
+    network_mode: host
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
       interval: 30s
@@ -279,16 +222,12 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - taxi-network
 
-  # ─────────────────────────────────────────────
-  # Airflow DAG Processor
-  # ─────────────────────────────────────────────
   airflow-dag-processor:
     <<: *airflow-common
     container_name: taxi-airflow-dag-processor
     command: dag-processor
+    network_mode: host
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
       interval: 30s
@@ -300,16 +239,14 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - taxi-network
 
   airflow-worker:
     <<: *airflow-common
     command: celery worker
     container_name: taxi-airflow-worker
     hostname: airflow-worker
+    network_mode: host
     healthcheck:
-      # yamllint disable rule:line-length
       test:
         - "CMD-SHELL"
         - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
@@ -319,10 +256,8 @@ services:
       start_period: 30s
     environment:
       <<: *airflow-common-env
-      # Required to handle warm shutdown of the celery workers properly
-      # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
-      AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.get_host_ip_address"
+      AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.getfqdn"
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -330,15 +265,11 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - taxi-network
 
-  # ─────────────────────────────────────────────
-  # Airflow Triggerer
-  # ─────────────────────────────────────────────  
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
+    network_mode: host
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
       interval: 30s
@@ -350,12 +281,11 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-    networks:
-      - taxi-network
 
   airflow-init:
     <<: *airflow-common
     container_name: taxi-airflow-init
+    network_mode: host
     entrypoint: /bin/bash
     command:
       - -c
@@ -442,33 +372,32 @@ services:
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
-    networks:
-      - taxi-network
 
   airflow-cli:
     <<: *airflow-common
     container_name: taxi-airflow-cli
+    network_mode: host
     profiles:
       - debug
     environment:
       <<: *airflow-common-env
       CONNECTION_CHECK_MAX_COUNT: "0"
-    # Workaround for entrypoint issue. See: https://github.com/apache/airflow/issues/16252
     command:
       - bash
       - -c
       - airflow
     depends_on:
-      <<: *airflow-common-depends-on
-      airflow-db:
+      postgres:
         condition: service_healthy
-    networks:
-      - taxi-network
+      postgres-ops:
+        condition: service_healthy
+      trino:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  # ─────────────────────────────────────────────
-  # Data Generator
-  # Populates Postgres + MySQL with synthetic data
-  # ─────────────────────────────────────────────
   data-generator:
     build:
       context: ./data-generator/generator

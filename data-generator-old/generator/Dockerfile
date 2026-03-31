@@ -7,6 +7,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy script generator
-COPY generator.py .
+COPY generate.py .
 
-CMD ["python", "-u", "generator.py"]
+CMD ["python", "-u", "generate.py"]

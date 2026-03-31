@@ -3,7 +3,7 @@ version: "1.0.0"
 config-version: 2
 
 profile: "ride_hailing"
-packages-install-path: /dbt_packages
+
 # ─────────────────────────────────────────────────────────────
 # Paths
 # ─────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ clean-targets:   ["target", "dbt_packages"]
 # ─────────────────────────────────────────────────────────────
 vars:
   # Ganti dengan GCP project ID
-  gcp_project:        "taxi-pipeline-123"
+  gcp_project:        "dbt-taxi-explore"
 
   # Dataset sumber (Bronze layer – hasil load Airflow)
   bronze_pg_dataset:    "bronze_pg"
@@ -40,225 +40,42 @@ vars:
 # ─────────────────────────────────────────────────────────────
 models:
   ride_hailing:
+    +persist_docs:
+      relation: true
+      columns: true
 
-    # ── Bronze ── (views saja, raw data milik Airflow)
+    # ── BRONZE ────────────────────────────────────────────────────
     bronze:
-      +schema:       "bronze_pg"
-      +materialized: view
-      +tags:         ["bronze"]
+      +materialized: incremental
+      +schema: bronze
+      +tags: ['bronze']
 
-    # ── Silver ──
+    # ── SILVER ────────────────────────────────────────────────────
     silver:
-      +schema:       "silver_core"
-      +tags:         ["silver"]
+      +materialized: incremental
+      +schema: silver
+      +tags: ['silver']
 
-      dim:
-        # Dimensi statik → table, full refresh cukup
-        dim_date:
-          +materialized: table
-          +tags:         ["dim", "static"]
-        dim_time:
-          +materialized: table
-          +tags:         ["dim", "static"]
-        dim_payment_method:
-          +materialized: table
-          +tags:         ["dim", "static"]
-        dim_trip_status:
-          +materialized: table
-          +tags:         ["dim", "static"]
-
-        # Dimensi semi-dinamis → incremental
-        dim_vehicle:
-          +materialized: incremental
-          +incremental_strategy: merge
-          +unique_key: vehicle_id
-          +tags:       ["dim", "incremental"]
-        dim_location:
-          +materialized: incremental
-          +incremental_strategy: merge
-          +unique_key: location_key
-          +tags:       ["dim", "incremental"]
-        dim_promo:
-          +materialized: incremental
-          +incremental_strategy: merge
-          +unique_key: promo_id
-          +tags:       ["dim", "incremental"]
-
-        # SCD Type 2 → dikelola via dbt snapshot
-        dim_customer:
-          +materialized: incremental
-          +incremental_strategy: merge
-          +unique_key: customer_key
-          +tags:       ["dim", "scd2"]
-        dim_driver:
-          +materialized: incremental
-          +incremental_strategy: merge
-          +unique_key: driver_key
-          +tags:       ["dim", "scd2"]
-
-      fact:
-        +materialized: incremental
-        +incremental_strategy: merge
-        +tags:         ["fact", "incremental"]
-        +cluster_by:   ["created_at"]
-
-        fct_trip:
-          +unique_key:   trip_id
-          +partition_by:
-            field:       "created_at"
-            data_type:   "timestamp"
-            granularity: "month"
-
-        fct_payment:
-          +unique_key:   payment_id
-          +partition_by:
-            field:       "created_at"
-            data_type:   "timestamp"
-            granularity: "month"
-
-        fct_driver_payout:
-          +unique_key:   payout_id
-          +partition_by:
-            field:       "created_at"
-            data_type:   "timestamp"
-            granularity: "month"
-
-        fct_rating:
-          +unique_key:   rating_id
-          +partition_by:
-            field:       "created_at"
-            data_type:   "timestamp"
-            granularity: "month"
-
-        fct_promo_redemption:
-          +unique_key:   redemption_id
-          +partition_by:
-            field:       "created_at"
-            data_type:   "timestamp"
-            granularity: "month"
-
-    # ── Gold ──
+    # ── GOLD ──────────────────────────────────────────────────────
     gold:
-      +tags: ["gold"]
-
-      operations:
-        +schema: "gold_operations"
-        +materialized: incremental
-        +incremental_strategy: insert_overwrite
-        +tags: ["gold", "operations"]
-
-        dm_trip_daily_city:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-          +cluster_by:   ["city"]
-
-        dm_trip_hourly_city:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-          +cluster_by:   ["city"]
-
-      finance:
-        +schema: "gold_finance"
-        +materialized: incremental
-        +incremental_strategy: insert_overwrite
-        +tags: ["gold", "finance"]
-
-        dm_finance_daily_city:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-          +cluster_by:   ["city"]
-
-        dm_payment_method_daily:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-          +cluster_by:   ["payment_method_name"]
-
-      marketing:
-        +schema: "gold_marketing"
-        +materialized: incremental
-        +incremental_strategy: insert_overwrite
-        +tags: ["gold", "marketing"]
-
-        dm_promo_daily:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-
-        dm_campaign_daily_channel:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-          +cluster_by:   ["channel_name"]
-
-        dm_customer_segment_daily:
-          +materialized: incremental
-          +incremental_strategy: merge
-          +unique_key:   ["snapshot_date", "segment_name"]
-          +tags:         ["gold", "marketing", "snapshot"]
-
-      driver:
-        +schema: "gold_driver"
-        +materialized: incremental
-        +incremental_strategy: insert_overwrite
-        +tags: ["gold", "driver"]
-
-        dm_driver_daily_performance:
-          +partition_by:
-            field:       "date_key"
-            data_type:   "int64"
-            range:
-              start:     20260101
-              end:       20991231
-              interval:  100
-          +cluster_by:   ["city"]
-
-        dm_driver_monthly_summary:
-          +partition_by:
-            field:       "month_key"
-            data_type:   "string"
+      +schema: gold
+      +materialized: table
+      +tags: ['gold']
 
 # ─────────────────────────────────────────────────────────────
-# Seeds
-# ─────────────────────────────────────────────────────────────
-seeds:
-  ride_hailing:
-    +schema: "silver_core"
-    +tags:   ["seed", "static"]
-
-# ─────────────────────────────────────────────────────────────
-# Snapshots
+# Snapshots Config
 # ─────────────────────────────────────────────────────────────
 snapshots:
   ride_hailing:
-    +schema: "silver_snapshots"
-    +tags:          ["snapshot", "scd2"]
-    +strategy:      "timestamp"
-    +updated_at:    "updated_at"
+    +target_schema: silver_snapshots
+    +strategy: timestamp
+    +updated_at: updated_at
+    +invalidate_hard_deletes: true
+
+# ─────────────────────────────────────────────────────────────
+# Seeds Config
+# ─────────────────────────────────────────────────────────────
+seeds:
+  ride_hailing:
+    +schema: seeds
+
