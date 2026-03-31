@@ -1,10 +1,10 @@
 -- ============================================================
---  taxi_payments  (MySQL)
+--  ride_marketing_mysql  (MySQL)
 --  Tables: payment_methods, payments, promotions,
 --          promo_usage, driver_incentives
 -- ============================================================
 
-USE taxi_payments;
+USE ride_marketing_mysql;
 
 -- ─────────────────────
 --  PAYMENT METHODS
