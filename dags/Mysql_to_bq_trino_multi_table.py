@@ -38,7 +38,7 @@ GCP_CONN_ID   = "google_cloud_default"
 TRINO_BQ_CAT  = "bigquery"
 TRINO_PG_CAT  = "mysql"
 
-BQ_PROJECT    = "taxi-pipeline-123"
+BQ_PROJECT    = "dbt-taxi-explore"
 BQ_DATASET    = "dev_bronze_mysql"
 BQ_LOCATION   = "US"
 PG_SCHEMA     = "ride_marketing_mysql"
@@ -61,130 +61,173 @@ SHARED = dict(
 #  TABLE_CONFIGS  ← tambah / hapus entry di sini
 # ══════════════════════════════════════════════════════════════════════════════
 
-TABLE_CONFIGS: list[TableConfig] = [
+TABLE_CONFIGS = [
 
-    # ── promotions ──────────────────────────────────────────────────────────────
+    # ── payment_methods ───────────────────────────────────────────────────
+    TableConfig(
+        pg_table        = "payment_methods",
+        bq_final_table  = "payment_methods",
+        merge_key       = "method_id",
+        partition_field = "created_at",
+        partition_type  = "MONTH",
+        cluster_fields  = ["method_type", "is_active"],
+        source_system   = "ride_marketing_mysql",
+        append_only     = False,
+        schema_fields   = [
+            {"name": "method_id",        "type": "INT64",     "mode": "REQUIRED"},
+            {"name": "method_code",      "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "method_name",      "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "method_type",      "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "provider",         "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "is_active",        "type": "BOOL",      "mode": "REQUIRED"},
+            {"name": "created_at",       "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_ingested_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",   "type": "STRING",    "mode": "REQUIRED"},
+        ],
+        table_columns   = """
+            method_id, method_code, method_name, method_type,
+            provider, is_active, created_at
+        """,
+    ),
+
+    # ── payments ──────────────────────────────────────────────────────────
+    TableConfig(
+        pg_table        = "payments",
+        bq_final_table  = "payments",
+        merge_key       = "payment_id",
+        partition_field = "created_at",
+        partition_type  = "DAY",
+        cluster_fields  = ["payment_status", "ride_id", "passenger_id", "method_id"],
+        source_system   = "ride_marketing_mysql",
+        append_only     = False,
+        schema_fields   = [
+            {"name": "payment_id",            "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "payment_code",          "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "ride_id",               "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "passenger_id",          "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "method_id",             "type": "INT64",     "mode": "REQUIRED"},
+            {"name": "amount",                "type": "NUMERIC",   "mode": "REQUIRED"},
+            {"name": "platform_fee",          "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "driver_earning",        "type": "NUMERIC",   "mode": "REQUIRED"},
+            {"name": "promo_discount",        "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "currency",              "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "payment_status",        "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "payment_gateway",       "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "gateway_ref",           "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "gateway_raw_response",  "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "paid_at",               "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "expired_at",            "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "refunded_at",           "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "refund_reason",         "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "created_at",            "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "updated_at",            "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_ingested_at",          "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",        "type": "STRING",    "mode": "NULLABLE"},
+        ],
+        table_columns   = """
+            payment_id, payment_code, ride_id, passenger_id, method_id,
+            amount, platform_fee, driver_earning, promo_discount, currency,
+            payment_status, payment_gateway, gateway_ref, gateway_raw_response,
+            paid_at, expired_at, refunded_at, refund_reason, created_at, updated_at,
+            _source_system
+        """,
+    ),
+
+    # ── promotions ────────────────────────────────────────────────────────
     TableConfig(
         pg_table        = "promotions",
         bq_final_table  = "promotions",
         merge_key       = "promo_id",
-        partition_field = "updated_at",
+        partition_field = "valid_from",
         partition_type  = "MONTH",
-        cluster_fields  = ["promo_type", "promo_status"],
+        cluster_fields  = ["promo_type", "is_active"],
         source_system   = "ride_marketing_mysql",
         append_only     = False,
         schema_fields   = [
-            {"name": "promo_id",       "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "promo_code",     "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "promo_name",     "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "promo_type",     "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "discount_type",  "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "discount_value", "type": "NUMERIC",   "mode": "NULLABLE"},
-            {"name": "start_date",     "type": "DATE",      "mode": "NULLABLE"},
-            {"name": "end_date",       "type": "DATE",      "mode": "NULLABLE"},
-            {"name": "budget_amount",  "type": "NUMERIC",   "mode": "NULLABLE"},
-            {"name": "promo_status",   "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "created_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "updated_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_ingested_at",   "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_source_system", "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "promo_id",                   "type": "INT64",     "mode": "REQUIRED"},
+            {"name": "promo_code",                 "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "promo_name",                 "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "description",                "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "promo_type",                 "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "discount_value",             "type": "NUMERIC",   "mode": "REQUIRED"},
+            {"name": "max_discount",               "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "min_fare",                   "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "applicable_vehicle_types",   "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "applicable_zones",           "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "max_usage_total",            "type": "INT64",     "mode": "NULLABLE"},
+            {"name": "max_usage_per_user",         "type": "INT64",     "mode": "NULLABLE"},
+            {"name": "current_usage",              "type": "INT64",     "mode": "NULLABLE"},
+            {"name": "valid_from",                 "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "valid_until",                "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "is_active",                  "type": "BOOL",      "mode": "NULLABLE"},
+            {"name": "created_at",                 "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_ingested_at",               "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",             "type": "STRING",    "mode": "REQUIRED"},
         ],
         table_columns   = """
-            promo_id, promo_code, promo_name, promo_type,
-            discount_type, discount_value, start_date, end_date,
-            budget_amount, promo_status,
-            created_at, updated_at
+            promo_id, promo_code, promo_name, description, promo_type,
+            discount_value, max_discount, min_fare, applicable_vehicle_types,
+            applicable_zones, max_usage_total, max_usage_per_user, current_usage,
+            valid_from, valid_until, is_active, created_at
         """,
     ),
-    # ── promo_redemptions ──────────────────────────────────────────────────────
+
+    # ── promo_usage ───────────────────────────────────────────────────────
     TableConfig(
-        pg_table        = "promo_redemptions",
-        bq_final_table  = "promo_redemptions",
-        merge_key       = "redemption_id",
-        partition_field = "redeemed_ts",
-        partition_type  = "MONTH",
-        cluster_fields  = ["promo_id", "redemption_status"],
+        pg_table        = "promo_usage",
+        bq_final_table  = "promo_usage",
+        merge_key       = "usage_id",
+        partition_field = "used_at",
+        partition_type  = "DAY",
+        cluster_fields  = ["promo_id", "passenger_id", "ride_id"],
         source_system   = "ride_marketing_mysql",
-        append_only     = False,
+        append_only     = True,
         schema_fields   = [
-            {"name": "redemption_id",     "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "promo_id",          "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "customer_id",       "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "trip_id",           "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "redeemed_ts",       "type": "TIMESTAMP", "mode": "NULLABLE"},
-            {"name": "discount_amount",   "type": "NUMERIC",   "mode": "NULLABLE"},
-            {"name": "redemption_status", "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "created_at",        "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "updated_at",        "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "usage_id",          "type": "INT64",     "mode": "REQUIRED"},
+            {"name": "promo_id",          "type": "INT64",     "mode": "REQUIRED"},
+            {"name": "passenger_id",      "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "ride_id",           "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "discount_given",    "type": "NUMERIC",   "mode": "REQUIRED"},
+            {"name": "used_at",           "type": "TIMESTAMP", "mode": "REQUIRED"},
             {"name": "_ingested_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_source_system",    "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "_source_system",    "type": "STRING",    "mode": "NULLABLE"},
         ],
         table_columns   = """
-            redemption_id, promo_id, customer_id, trip_id,
-            redeemed_ts, discount_amount, redemption_status,
-            created_at, updated_at
-        """,
-    ),
- 
-    # ── customer_segments ──────────────────────────────────────────────────────
-    TableConfig(
-        pg_table        = "customer_segments",
-        bq_final_table  = "customer_segments",
-        merge_key       = "id",
-        partition_field = "snapshot_date",
-        partition_type  = "MONTH",
-        cluster_fields  = ["segment_name", "customer_id"],
-        source_system   = "ride_marketing_mysql",
-        append_only     = False,
-        schema_fields   = [
-            {"name": "id",             "type": "INTEGER",   "mode": "REQUIRED"},
-            {"name": "customer_id",    "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "segment_name",   "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "segment_score",  "type": "NUMERIC",   "mode": "NULLABLE"},
-            {"name": "snapshot_date",  "type": "DATE",      "mode": "REQUIRED"},
-            {"name": "created_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "updated_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_ingested_at",   "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_source_system", "type": "STRING",    "mode": "REQUIRED"},
-        ],
-        table_columns   = """
-            id, customer_id, segment_name, segment_score,
-            snapshot_date, created_at, updated_at
-        """,
-    ),
- 
-    # ── campaign_spend ─────────────────────────────────────────────────────────
-    TableConfig(
-        pg_table        = "campaign_spend",
-        bq_final_table  = "campaign_spend",
-        merge_key       = "campaign_id",
-        partition_field = "spend_date",
-        partition_type  = "MONTH",
-        cluster_fields  = ["channel_name"],
-        source_system   = "ride_marketing_mysql",
-        append_only     = False,
-        schema_fields   = [
-            {"name": "campaign_id",    "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "campaign_name",  "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "channel_name",   "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "spend_date",     "type": "DATE",      "mode": "NULLABLE"},
-            {"name": "spend_amount",   "type": "NUMERIC",   "mode": "NULLABLE"},
-            {"name": "impressions",    "type": "INTEGER",   "mode": "NULLABLE"},
-            {"name": "clicks",         "type": "INTEGER",   "mode": "NULLABLE"},
-            {"name": "installs",       "type": "INTEGER",   "mode": "NULLABLE"},
-            {"name": "created_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "updated_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_ingested_at",   "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_source_system", "type": "STRING",    "mode": "REQUIRED"},
-        ],
-        table_columns   = """
-            campaign_id, campaign_name, channel_name, spend_date,
-            spend_amount, impressions, clicks, installs,
-            created_at, updated_at
+            usage_id, promo_id, passenger_id, ride_id,
+            discount_given, used_at, _source_system
         """,
     ),
 
-
+    # ── driver_incentives ────────────────────────────────────────────────
+    TableConfig(
+        pg_table        = "driver_incentives",
+        bq_final_table  = "driver_incentives",
+        merge_key       = "incentive_id",
+        partition_field = "period_date",
+        partition_type  = "MONTH",
+        cluster_fields  = ["driver_id", "incentive_type", "is_paid"],
+        source_system   = "ride_marketing_mysql",
+        append_only     = False,
+        schema_fields   = [
+            {"name": "incentive_id",      "type": "INT64",     "mode": "REQUIRED"},
+            {"name": "driver_id",         "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "incentive_type",    "type": "STRING",    "mode": "REQUIRED"},
+            {"name": "reference_id",      "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "amount",            "type": "NUMERIC",   "mode": "REQUIRED"},
+            {"name": "description",       "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "period_date",       "type": "DATE",      "mode": "REQUIRED"},
+            {"name": "is_paid",           "type": "BOOL",      "mode": "NULLABLE"},
+            {"name": "paid_at",           "type": "TIMESTAMP", "mode": "NULLABLE"},
+            {"name": "created_at",        "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_ingested_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "_source_system",    "type": "STRING",    "mode": "NULLABLE"},
+        ],
+        table_columns   = """
+            incentive_id, driver_id, incentive_type, reference_id,
+            amount, description, period_date, is_paid, paid_at,
+            created_at, _source_system
+        """,
+    ),
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -211,9 +254,9 @@ with DAG(
     ),
     default_args=default_args,
     schedule=CronDataIntervalTimetable("0 9 * * *", timezone="Asia/Jakarta"),
-    start_date=pendulum.datetime(2022, 6, 3, tz="Asia/Jakarta"),
-    catchup=False,
-    max_active_runs=1,
+    start_date=pendulum.datetime(2026, 3, 29, tz="Asia/Jakarta"),
+    catchup=True,
+    max_active_runs=2,
     tags=["mysql", "bigquery", "trino", "ingestion", "multi-table"],
     doc_md=__doc__,
     params={
