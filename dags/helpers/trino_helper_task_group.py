@@ -158,6 +158,7 @@ def make_table_task_group(
     append_only     = cfg.append_only
     schema_fields   = cfg.schema_fields
     table_columns   = cfg.table_columns
+    json_fields     = cfg.json_fields
 
     # Template BQ temp table — unik per tabel per run
     bq_temp_table = f"{bq_final_table}_temp_{{{{ ds_nodash }}}}"
@@ -165,7 +166,7 @@ def make_table_task_group(
     # Pre-compute column metadata — fail-fast sebelum DAG berjalan
     _schema_lookup  = {f["name"]: f["type"] for f in schema_fields}
     _columns        = parse_columns(table_columns, _schema_lookup)
-    _trino_columns  = build_trino_columns(_columns, _schema_lookup)
+    _trino_columns  = build_trino_columns(_columns, _schema_lookup, json_columns=json_fields)
     _metadata_exprs = build_metadata_exprs(source_system)
 
     # Asset lineage
