@@ -92,7 +92,7 @@ with DAG(
 
     dbt_snapshot = DockerOperator(
         task_id = "dbt_snapshot",
-        command = f"dbt snapshot --full-refresh --select tag:snapshot {DBT_BASE}",
+        command = f"dbt snapshot --select tag:snapshot {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
