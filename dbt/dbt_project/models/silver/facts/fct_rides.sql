@@ -183,7 +183,7 @@ final as (
         r.vehicle_type_id,
         r.pickup_zone_id,
         r.dropoff_zone_id,
-        r.requested_date                                    as date_id,
+        r.requested_date,                         
 
         -- ── Status & classification ───────────────────────────────
         r.ride_status,
