@@ -4,78 +4,86 @@ config-version: 2
 
 profile: "ride_hailing"
 
-# ─────────────────────────────────────────────────────────────
-# Paths
-# ─────────────────────────────────────────────────────────────
-model-paths:     ["models"]
-macro-paths:     ["macros"]
-seed-paths:      ["seeds"]
-test-paths:      ["tests"]
-snapshot-paths:  ["snapshots"]
-analysis-paths:  ["analyses"]
-docs-paths:      ["docs"]
+model-paths: ["models"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
 
-target-path:     "target"
-clean-targets:   ["target", "dbt_packages"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
 
-# ─────────────────────────────────────────────────────────────
-# Variables
-# ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────
+#  Project Variables
+# ─────────────────────────────────────────
 vars:
-  # Ganti dengan GCP project ID
-  gcp_project:        "dbt-taxi-explore"
-
-  # Dataset sumber (Bronze layer – hasil load Airflow)
-  bronze_pg_dataset:    "bronze_pg"
-  bronze_mysql_dataset: "bronze_mysql"
-
-  # Window incremental load (hari ke belakang untuk safety net late data)
+  gcp_project: "dbt-taxi-explore"
+  bronze_pg_dataset: "dev_bronze_pg"
   incremental_lookback_days: 3
-
-  # Periode data bisnis
   data_start_date: "2026-01-01"
 
-# ─────────────────────────────────────────────────────────────
-# Model Config  (default + per-folder override)
-# ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────
+#  Model Configurations (Layer Defaults)
+# ─────────────────────────────────────────
 models:
   ride_hailing:
-    +persist_docs:
-      relation: true
-      columns: true
 
-    # ── BRONZE ────────────────────────────────────────────────────
+    # ── BRONZE: source views only, no transform ──
     bronze:
-      +materialized: incremental
-      +schema: bronze
-      +tags: ['bronze']
+      +schema: "dev_bronze_pg"
+      +materialized: view
+      +tags: ["bronze"]
+      +persist_docs:
+        relation: true
+        columns: true
 
-    # ── SILVER ────────────────────────────────────────────────────
+    # ── SILVER: cleaned, joined, star schema ──
     silver:
-      +materialized: incremental
-      +schema: silver
-      +tags: ['silver']
+      +schema: "dev_silver"
+      +tags: ["silver"]
+      +persist_docs:
+        relation: true
+        columns: true
 
-    # ── GOLD ──────────────────────────────────────────────────────
+      staging:
+        +materialized: view
+        +tags: ["silver", "staging"]
+
+      dimensions:
+        +materialized: table
+        +tags: ["silver", "dimension"]
+
+      facts:
+        +materialized: incremental
+        +incremental_strategy: merge
+        +tags: ["silver", "fact"]
+
+    # ── GOLD: aggregated marts for dashboards ──
     gold:
-      +schema: gold
-      +materialized: table
-      +tags: ['gold']
+      +schema: "dev_gold"
+      +tags: ["gold"]
+      +persist_docs:
+        relation: true
+        columns: true
 
-# ─────────────────────────────────────────────────────────────
-# Snapshots Config
-# ─────────────────────────────────────────────────────────────
+      mart_operations:
+        +materialized: table
+        +tags: ["gold", "operations"]
+
+      mart_finance:
+        +materialized: table
+        +tags: ["gold", "finance"]
+
+      mart_driver:
+        +materialized: table
+        +tags: ["gold", "driver"]
+
+# ─────────────────────────────────────────
+#  Snapshot Configurations
+# ─────────────────────────────────────────
 snapshots:
-  ride_hailing:
-    +target_schema: silver_snapshots
+  dbt_taxi:
+    +target_schema: "dev_snapshots"
     +strategy: timestamp
-    +updated_at: updated_at
-    +invalidate_hard_deletes: true
-
-# ─────────────────────────────────────────────────────────────
-# Seeds Config
-# ─────────────────────────────────────────────────────────────
-seeds:
-  ride_hailing:
-    +schema: seeds
-
+    +tags: ["snapshot", "scd2"]

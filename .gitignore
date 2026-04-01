@@ -46,3 +46,4 @@ Makefile
 credentials/service-account.json
 image/
 dev_bronze_pg&mysql.sql
+dbt_taxi/

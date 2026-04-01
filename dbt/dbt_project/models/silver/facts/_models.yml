@@ -1,0 +1,42 @@
+version: 2
+
+models:
+
+  - name: fct_rides
+    description: >
+      Central fact table — one row per ride. Joins all dimensions inline
+      for denormalised query performance. Incremental merge on ride_id,
+      partitioned by requested_date.
+    columns:
+      - name: ride_id
+        tests: [unique, not_null]
+      - name: passenger_id
+        tests: [not_null]
+      - name: ride_status
+        tests:
+          - accepted_values:
+              values: ["REQUESTED", "ACCEPTED", "PICKED_UP", "COMPLETED", "CANCELLED", "NO_DRIVER"]
+      - name: total_fare
+        description: Final fare in IDR. 0 for cancelled rides.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: surge_multiplier
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 1.0
+              max_value: 5.0
+      - name: distance_km
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+  - name: fct_ride_events
+    description: >
+      Event-level fact with parsed JSON payload per event_type and ride context
+      joined from fct_rides. Incremental merge on event_id.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: ride_id
+        tests: [not_null]

@@ -1,0 +1,93 @@
+version: 2
+
+models:
+
+  # ─────────────────────────────────────────
+  #  stg_drivers
+  # ─────────────────────────────────────────
+  - name: stg_drivers
+    description: >
+      Cleaned driver records from Bronze. Phone numbers normalised to
+      08XXXXXXXXX, NIK stripped of spaces and validated to 16 digits,
+      license plates uppercased. DQ flags appended for observability.
+    columns:
+      - name: driver_id
+        tests: [unique, not_null]
+      - name: driver_code
+        tests: [unique, not_null]
+      - name: phone_number_clean
+        description: Canonical Indonesian phone number (08XXXXXXXXX) or NULL if invalid.
+      - name: nik_clean
+        description: 16-digit NIK without spaces, or NULL if could not be cleaned.
+      - name: license_plate_clean
+        description: Uppercased, trimmed license plate.
+      - name: driver_status
+        tests:
+          - accepted_values:
+              values: ["ACTIVE", "INACTIVE", "SUSPENDED", "PENDING"]
+      - name: rating
+        description: Rating capped to [1.0, 5.0].
+
+  # ─────────────────────────────────────────
+  #  stg_passengers
+  # ─────────────────────────────────────────
+  - name: stg_passengers
+    description: Cleaned passenger records with age and gender standardisation.
+    columns:
+      - name: passenger_id
+        tests: [unique, not_null]
+      - name: passenger_code
+        tests: [unique, not_null]
+      - name: passenger_status
+        tests:
+          - accepted_values:
+              values: ["ACTIVE", "INACTIVE", "BANNED"]
+      - name: gender
+        tests:
+          - accepted_values:
+              values: ["M", "F", "OTHER", "UNKNOWN"]
+
+  # ─────────────────────────────────────────
+  #  stg_rides
+  # ─────────────────────────────────────────
+  - name: stg_rides
+    description: >
+      Enriched ride records with derived durations, time bucket flags,
+      and surge/promo boolean indicators. Incremental merge on ride_id.
+    columns:
+      - name: ride_id
+        tests: [unique, not_null]
+      - name: ride_code
+        tests: [unique, not_null]
+      - name: ride_status
+        tests:
+          - accepted_values:
+              values: ["REQUESTED", "ACCEPTED", "PICKED_UP", "COMPLETED", "CANCELLED", "NO_DRIVER"]
+      - name: requested_date
+        tests: [not_null]
+      - name: time_bucket
+        tests:
+          - accepted_values:
+              values: ["morning_peak", "evening_peak", "late_night", "off_peak"]
+
+  # ─────────────────────────────────────────
+  #  stg_ride_events
+  # ─────────────────────────────────────────
+  - name: stg_ride_events
+    description: >
+      Flattened ride event log with JSON payload parsed into typed columns
+      per event_type. Incremental merge on event_id.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: ride_id
+        tests: [not_null]
+      - name: event_type
+        tests:
+          - accepted_values:
+              values:
+                - "RIDE_REQUESTED"
+                - "RIDE_ACCEPTED"
+                - "PASSENGER_PICKED_UP"
+                - "RIDE_COMPLETED"
+                - "RIDE_CANCELLED"
