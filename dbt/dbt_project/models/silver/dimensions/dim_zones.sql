@@ -17,6 +17,7 @@ with source as (
 )
 
 select
+    {{ surrogate_key(['zone_id']) }}    as zone_key,
     zone_id,
     zone_code,
     zone_name,

@@ -15,6 +15,16 @@
 --    - What was driver X's status on a specific date?
 --    - Which drivers changed vehicle type more than once?
 -- ══════════════════════════════════════════════════════════════
+{% snapshot snapshot_dim_driver %}
+
+{{
+    config(
+        unique_key    = 'driver_id',
+        strategy      = 'timestamp',
+        updated_at    = 'updated_at',
+        invalidate_hard_deletes = True
+    )
+}}
 
 select
     driver_id,
@@ -39,3 +49,5 @@ select
     _source_system
 
 from {{ source('bronze_pg', 'drivers') }}
+
+{% endsnapshot %}

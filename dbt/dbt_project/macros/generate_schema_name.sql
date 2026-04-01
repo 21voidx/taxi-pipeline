@@ -35,7 +35,7 @@
 
     {%- elif target.name == 'dev' -%}
 
-        {#- Local dev: prefix with developer's target.schema name -#}
+        {#- Local dev: prefix with developers target.schema name -#}
         {%- if custom_schema_name -%}
             {{ default_schema }}_{{ custom_schema_name | trim }}
         {%- else -%}

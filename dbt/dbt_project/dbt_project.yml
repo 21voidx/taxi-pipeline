@@ -31,7 +31,7 @@ models:
 
     # ── BRONZE: source views only, no transform ──
     bronze:
-      +schema: "dev_bronze_pg"
+      +schema: "bronze_pg"
       +materialized: view
       +tags: ["bronze"]
       +persist_docs:
@@ -40,15 +40,11 @@ models:
 
     # ── SILVER: cleaned, joined, star schema ──
     silver:
-      +schema: "dev_silver"
+      +schema: "silver"
       +tags: ["silver"]
       +persist_docs:
         relation: true
         columns: true
-
-      staging:
-        +materialized: view
-        +tags: ["silver", "staging"]
 
       dimensions:
         +materialized: table
@@ -61,7 +57,7 @@ models:
 
     # ── GOLD: aggregated marts for dashboards ──
     gold:
-      +schema: "dev_gold"
+      +schema: "gold"
       +tags: ["gold"]
       +persist_docs:
         relation: true
@@ -84,9 +80,7 @@ models:
 # ─────────────────────────────────────────
 snapshots:
   ride_hailing:
-    +target_schema: "dev_snapshots"
+    +schema: "silver_snapshots"
     +strategy: timestamp
     +updated_at: "updated_at"
-    +unique_key: "driver_id"
-    +invalidate_hard_deletes: true
     +tags: ["snapshot", "scd2"]

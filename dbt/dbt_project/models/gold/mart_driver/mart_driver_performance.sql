@@ -26,7 +26,7 @@ driver_dim as (
            home_zone_code, home_zone_name, home_city, home_province,
            rating, joined_at
     from {{ ref('dim_drivers') }}
-
+    where is_current = true
 ),
 
 driver_stats as (

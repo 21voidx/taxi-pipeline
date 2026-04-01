@@ -24,6 +24,7 @@ with date_spine as (
 enriched as (
 
     select
+        {{ surrogate_key(['cast(date_day as string)']) }}           as date_key,
         cast(date_day as date)                                      as date_id,
         date_day                                                    as full_date,
 
@@ -37,10 +38,10 @@ enriched as (
         extract(quarter from date_day)                              as quarter_num,
 
         -- ── Formatted labels ──────────────────────────────────────
-        format_date('%A',   date_day)                               as day_name,          -- Monday
-        format_date('%B',   date_day)                               as month_name,        -- January
-        format_date('%Y%m', date_day)                               as year_month,        -- 202601
-        format_date('%Y-Q%Q', date_day)                             as year_quarter,      -- 2026-Q1
+        format_date('%A',   date_day)                               as day_name,
+        format_date('%B',   date_day)                               as month_name,
+        format_date('%Y%m', date_day)                               as year_month,
+        format_date('%Y-Q%Q', date_day)                             as year_quarter,
         format_date('%Y-W%V', date_day)                             as iso_year_week,
 
         -- ── Boolean flags ─────────────────────────────────────────
@@ -49,9 +50,8 @@ enriched as (
         case when extract(dayofweek from date_day) not in (1, 7)
              then true else false end                               as is_weekday,
 
-        -- ── Indonesian peak ride times (based on generator logic) ──
-        -- (flag on day level – actual hour logic is in stg_rides)
-        false                                                       as is_public_holiday,   -- TODO: seed table
+        -- TODO: replace with seed table for accurate public holiday flags
+        false                                                       as is_public_holiday,
 
         -- ── Relative helpers ──────────────────────────────────────
         date_diff(current_date(), date_day, day)                    as days_ago,
