@@ -78,6 +78,12 @@ with DAG(
         **DOCKER_COMMON,
     )
 
+    dbt_deps = DockerOperator(
+        task_id = "dbt_deps",
+        command = f"dbt deps {DBT_BASE}",
+        **DOCKER_COMMON,
+    )
+
     # dbt_seed = DockerOperator(
     #     task_id = "dbt_seed",
     #     command = f"dbt seed {DBT_BASE}",
@@ -102,4 +108,4 @@ with DAG(
         **DOCKER_COMMON,
     )
 
-    dbt_debug >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
+    dbt_debug >> dbt_deps >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
