@@ -78,29 +78,29 @@ with DAG(
         **DOCKER_COMMON,
     )
 
-    dbt_seed = DockerOperator(
-        task_id = "dbt_seed",
-        command = f"dbt seed {DBT_BASE}",
-        **DOCKER_COMMON,
-    )
+    # dbt_seed = DockerOperator(
+    #     task_id = "dbt_seed",
+    #     command = f"dbt seed {DBT_BASE}",
+    #     **DOCKER_COMMON,
+    # )
 
-    dbt_snapshot = DockerOperator(
-        task_id = "dbt_snapshot",
-        command = f"dbt snapshot {DBT_BASE}",
-        **DOCKER_COMMON,
-    )
+    # dbt_snapshot = DockerOperator(
+    #     task_id = "dbt_snapshot",
+    #     command = f"dbt snapshot {DBT_BASE}",
+    #     **DOCKER_COMMON,
+    # )
 
-    dbt_run_silver = DockerOperator(
-        task_id = "dbt_run_silver",
-        command = f"dbt run --select tag:silver {DBT_BASE}",
-        **DOCKER_COMMON,
-    )
+    # dbt_run_silver = DockerOperator(
+    #     task_id = "dbt_run_silver",
+    #     command = f"dbt run --select tag:silver {DBT_BASE}",
+    #     **DOCKER_COMMON,
+    # )
 
-    dbt_run_gold = DockerOperator(
-        task_id = "dbt_run_gold",
-        command = f"dbt run --select tag:gold {DBT_BASE}",
-        **DOCKER_COMMON,
-    )
+    # dbt_run_gold = DockerOperator(
+    #     task_id = "dbt_run_gold",
+    #     command = f"dbt run --select tag:gold {DBT_BASE}",
+    #     **DOCKER_COMMON,
+    # )
 
     dbt_debug
     # dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
