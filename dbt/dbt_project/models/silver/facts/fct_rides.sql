@@ -259,8 +259,8 @@ final as (
     from enriched r
     left join drivers d         on r.driver_id      = d.driver_id
     left join passengers p      on r.passenger_id   = p.passenger_id
-    left join zones pz   on r.pickup_zone_id = pz.zone_id
-    left join zones dz  on r.dropoff_zone_id = dz.zone_id
+    left join pickup_zones pz   on r.pickup_zone_id = pz.zone_id
+    left join dropoff_zones dz  on r.dropoff_zone_id = dz.zone_id
     left join vehicle_types vt  on r.vehicle_type_id = vt.vehicle_type_id
 
 )
