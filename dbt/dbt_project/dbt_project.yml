@@ -83,7 +83,10 @@ models:
 #  Snapshot Configurations
 # ─────────────────────────────────────────
 snapshots:
-  dbt_taxi:
+  ride_hailing:
     +target_schema: "dev_snapshots"
     +strategy: timestamp
+    +updated_at: "updated_at"
+    +unique_key: "driver_id"
+    +invalidate_hard_deletes: true
     +tags: ["snapshot", "scd2"]

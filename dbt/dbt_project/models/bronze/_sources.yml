@@ -14,13 +14,14 @@ sources:
       OLTP source and may contain dirty values (phone numbers, NIK,
       license plates). All cleaning happens in the Silver layer.
     database: "{{ var('gcp_project') }}"
-    schema: "{{ var('bronze_pg_dataset') }}"
+    schema: "{{ target.name }}_{{ var('bronze_pg_dataset') }}"
     tags: ["bronze", "postgres"]
 
     # ── Freshness SLA ──
     freshness:
       warn_after: { count: 2, period: hour }
       error_after: { count: 6, period: hour }
+      loaded_at_field: _ingested_at
 
     tables:
 

@@ -1,25 +1,3 @@
-{% snapshot scd2_drivers %}
-
-{{
-    config(
-        target_schema  = 'dev_snapshots',
-        unique_key     = 'driver_id',
-
-        -- ── Strategy: timestamp ──────────────────────────────────
-        -- updated_at is maintained by Postgres trigger on every UPDATE.
-        -- Airflow loads the full table (or CDC delta) to Bronze on each run.
-        -- When dbt snapshot detects a new updated_at for the same driver_id,
-        -- it closes the old row (dbt_valid_to = NOW()) and opens a new one.
-        strategy       = 'timestamp',
-        updated_at     = 'updated_at',
-
-        -- ── Retention: keep all history (SCD Type 2) ────────────
-        invalidate_hard_deletes = true,
-
-        tags           = ['snapshot', 'scd2', 'drivers']
-    )
-}}
-
 -- ══════════════════════════════════════════════════════════════
 --  scd2_drivers
 --
@@ -61,5 +39,3 @@ select
     _source_system
 
 from {{ source('bronze_pg', 'drivers') }}
-
-{% endsnapshot %}
