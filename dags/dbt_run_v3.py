@@ -65,8 +65,8 @@ with DAG(
     dag_id      = "dbt_run_v3",
     description = "dbt pipeline: seed → snapshot → silver → gold",
     schedule    = "@daily",
-    start_date  = pendulum.datetime(2026, 3, 21, tz="Asia/Jakarta"),
-    catchup     = False,
+    start_date  = pendulum.datetime(2026, 3, 29, tz="Asia/Jakarta"),
+    catchup     = True,
     max_active_runs = 1,
     tags        = ["dbt", "bigquery", "transformation"],
     default_args = default_args,
@@ -84,23 +84,22 @@ with DAG(
     #     **DOCKER_COMMON,
     # )
 
-    # dbt_snapshot = DockerOperator(
-    #     task_id = "dbt_snapshot",
-    #     command = f"dbt snapshot {DBT_BASE}",
-    #     **DOCKER_COMMON,
-    # )
+    dbt_snapshot = DockerOperator(
+        task_id = "dbt_snapshot",
+        command = f"dbt snapshot --select tag:snapshot {DBT_BASE}",
+        **DOCKER_COMMON,
+    )
 
-    # dbt_run_silver = DockerOperator(
-    #     task_id = "dbt_run_silver",
-    #     command = f"dbt run --select tag:silver {DBT_BASE}",
-    #     **DOCKER_COMMON,
-    # )
+    dbt_run_silver = DockerOperator(
+        task_id = "dbt_run_silver",
+        command = f"dbt run --select tag:silver {DBT_BASE}",
+        **DOCKER_COMMON,
+    )
 
-    # dbt_run_gold = DockerOperator(
-    #     task_id = "dbt_run_gold",
-    #     command = f"dbt run --select tag:gold {DBT_BASE}",
-    #     **DOCKER_COMMON,
-    # )
+    dbt_run_gold = DockerOperator(
+        task_id = "dbt_run_gold",
+        command = f"dbt run --select tag:gold {DBT_BASE}",
+        **DOCKER_COMMON,
+    )
 
-    dbt_debug
-    # dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
+    dbt_debug >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
