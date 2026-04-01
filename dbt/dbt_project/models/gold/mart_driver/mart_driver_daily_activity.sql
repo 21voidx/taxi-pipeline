@@ -29,7 +29,7 @@ select
     driver_name,
     vehicle_type_code,
     vehicle_category,
-    experience_tier,
+    driver_tier,
     requested_date                                                  as ride_date,
 
     -- ── Daily volume ──────────────────────────────────────────

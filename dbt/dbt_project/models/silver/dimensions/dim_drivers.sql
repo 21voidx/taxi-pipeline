@@ -94,7 +94,7 @@ cleaned as (
 
 vehicle_types as (
 
-    select * from {{ source('bronze_pg', 'vehicle_types') }}
+    select * from {{ ref('dim_vehicle_types') }}
 
 ),
 
@@ -133,6 +133,7 @@ joined as (
         vt.type_code                                    as vehicle_type_code,
         vt.type_name                                    as vehicle_type_name,
         vt.capacity                                     as vehicle_capacity,
+        vt.vehicle_category,
         d.vehicle_brand,
         d.vehicle_model,
         d.vehicle_year,
