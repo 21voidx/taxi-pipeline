@@ -41,7 +41,7 @@ DOCKER_COMMON = dict(
     mount_tmp_dir  = False,           # ← fix: cegah error /tmp/airflowtmp tidak ada
     network_mode   = "host",
     environment    = {
-        "GCP_PROJECT_ID":                "taxi-pipeline-123",
+        "GCP_PROJECT_ID":                "dbt-taxi-explore",
         "GOOGLE_APPLICATION_CREDENTIALS": SA_KEY_CONTAINER,
     },
     mounts = [
@@ -65,7 +65,7 @@ with DAG(
     dag_id      = "dbt_run_v3",
     description = "dbt pipeline: seed → snapshot → silver → gold",
     schedule    = "@daily",
-    start_date  = pendulum.datetime(2026, 3, 11, tz="Asia/Jakarta"),
+    start_date  = pendulum.datetime(2026, 3, 21, tz="Asia/Jakarta"),
     catchup     = False,
     max_active_runs = 1,
     tags        = ["dbt", "bigquery", "transformation"],
@@ -102,4 +102,5 @@ with DAG(
         **DOCKER_COMMON,
     )
 
-    dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
+    dbt_debug
+    # dbt_debug >> dbt_seed >> dbt_snapshot >> dbt_run_silver >> dbt_run_gold
