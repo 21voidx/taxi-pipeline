@@ -64,9 +64,9 @@ DOCKER_COMMON = dict(
 with DAG(
     dag_id      = "dbt_run_v3",
     description = "dbt pipeline: seed → snapshot → silver → gold",
-    schedule    = "@once",
+    schedule    = "0 */2 * * *",  # At minute 0 past every 2nd hour
     start_date  = pendulum.datetime(2026, 3, 29, tz="Asia/Jakarta"),
-    catchup     = True,
+    catchup     = False,
     max_active_runs = 1,
     tags        = ["dbt", "bigquery", "transformation"],
     default_args = default_args,
@@ -98,13 +98,13 @@ with DAG(
 
     dbt_run_silver = DockerOperator(
         task_id = "dbt_run_silver",
-        command = f"dbt run --full-refresh --select tag:silver {DBT_BASE}",
+        command = f"dbt run --select tag:silver {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
     dbt_run_gold = DockerOperator(
         task_id = "dbt_run_gold",
-        command = f"dbt run --full-refresh --select tag:gold {DBT_BASE}",
+        command = f"dbt run --select tag:gold {DBT_BASE}",
         **DOCKER_COMMON,
     )
 
