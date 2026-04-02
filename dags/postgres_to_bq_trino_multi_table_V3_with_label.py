@@ -276,30 +276,30 @@ TABLE_CONFIGS = [
         """,
     ),
 
-    # ── ride_events ────────────────────────────────────────────────────────
-    TableConfig(
-        pg_table        = "ride_events",
-        bq_final_table  = "ride_events",
-        merge_key       = "event_id",
-        partition_field = "occurred_at",
-        partition_type  = "MONTH",
-        cluster_fields  = ["event_type", "ride_id"],
-        json_fields     = ["event_payload"],
-        source_system   = "ride_ops_pg",
-        append_only     = True,
-        schema_fields   = [
-            {"name": "event_id",         "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "ride_id",          "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "event_type",       "type": "STRING",    "mode": "REQUIRED"},
-            {"name": "event_payload",    "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "occurred_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_ingested_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
-            {"name": "_source_system",   "type": "STRING",    "mode": "REQUIRED"},
-        ],
-        table_columns   = """
-            event_id, ride_id, event_type, event_payload, occurred_at
-        """,
-    ),
+    # # ── ride_events ────────────────────────────────────────────────────────
+    # TableConfig(
+    #     pg_table        = "ride_events",
+    #     bq_final_table  = "ride_events",
+    #     merge_key       = "event_id",
+    #     partition_field = "occurred_at",
+    #     partition_type  = "MONTH",
+    #     cluster_fields  = ["event_type", "ride_id"],
+    #     json_fields     = ["event_payload"],
+    #     source_system   = "ride_ops_pg",
+    #     append_only     = True,
+    #     schema_fields   = [
+    #         {"name": "event_id",         "type": "STRING",    "mode": "REQUIRED"},
+    #         {"name": "ride_id",          "type": "STRING",    "mode": "REQUIRED"},
+    #         {"name": "event_type",       "type": "STRING",    "mode": "REQUIRED"},
+    #         {"name": "event_payload",    "type": "STRING",    "mode": "NULLABLE"},
+    #         {"name": "occurred_at",      "type": "TIMESTAMP", "mode": "REQUIRED"},
+    #         {"name": "_ingested_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
+    #         {"name": "_source_system",   "type": "STRING",    "mode": "REQUIRED"},
+    #     ],
+    #     table_columns   = """
+    #         event_id, ride_id, event_type, event_payload, occurred_at
+    #     """,
+    # ),
 ]
 
 
