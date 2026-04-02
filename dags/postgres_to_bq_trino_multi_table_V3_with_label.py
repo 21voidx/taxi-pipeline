@@ -21,10 +21,12 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pendulum
-from airflow import DAG
-from airflow.models.param import Param
+from airflow.sdk import DAG, Param
 from airflow.timetables.interval import CronDataIntervalTimetable
-from helpers.trino_helper_task_group_v3_with_label import TableConfig, make_table_task_group
+
+# ── Sekarang cukup satu import dari satu file helper ──────────────────────────
+from helpers.trino_helper import TableConfig, make_table_task_group
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  GLOBAL CONFIG
@@ -54,7 +56,7 @@ PG_SCHEMA     = "public"
 BASE_LABELS: dict[str, str] = {
     "env":      "dev",                                          # ganti: staging / prod
     "team":     "data-eng",
-    "dag-id":   DAG_ID.lower().replace("_", "-")[:63],         # postgres-to-bq-trino-multi-table-v2
+    "dag-id":   DAG_ID.lower().replace("_", "-")[:63],         # postgres-to-bq-trino-multi-table-v3...
     "layer":    "bronze",                                       # bronze / silver / gold
     "pipeline": "ingestion",                                    # ingestion / transformation
 }
@@ -73,6 +75,7 @@ SHARED = dict(
     source_tz     = SOURCE_TZ,
     dag_labels    = BASE_LABELS,    # ← semua tabel mewarisi label ini
 )
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  TABLE_CONFIGS  ← tambah / hapus entry di sini
@@ -156,24 +159,23 @@ TABLE_CONFIGS = [
             {"name": "sim_number",       "type": "STRING",    "mode": "NULLABLE"},
             {"name": "license_plate",    "type": "STRING",    "mode": "REQUIRED"},
             {"name": "vehicle_type_id",  "type": "INT64",     "mode": "NULLABLE"},
-            {"name": "vehicle_brand",    "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "vehicle_model",    "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "vehicle_year",     "type": "INT64",     "mode": "NULLABLE"},
-            {"name": "vehicle_color",    "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "birth_date",       "type": "DATE",      "mode": "NULLABLE"},
+            {"name": "gender",           "type": "STRING",    "mode": "NULLABLE"},
             {"name": "home_zone_id",     "type": "INT64",     "mode": "NULLABLE"},
-            {"name": "rating",           "type": "NUMERIC",   "mode": "NULLABLE"},
+            {"name": "referral_code",    "type": "STRING",    "mode": "NULLABLE"},
+            {"name": "is_verified",      "type": "BOOL",      "mode": "NULLABLE"},
             {"name": "total_trips",      "type": "INT64",     "mode": "NULLABLE"},
             {"name": "status",           "type": "STRING",    "mode": "NULLABLE"},
-            {"name": "joined_at",        "type": "TIMESTAMP", "mode": "REQUIRED"},
+            {"name": "registered_at",    "type": "TIMESTAMP", "mode": "REQUIRED"},
             {"name": "updated_at",       "type": "TIMESTAMP", "mode": "REQUIRED"},
             {"name": "_ingested_at",     "type": "TIMESTAMP", "mode": "REQUIRED"},
             {"name": "_source_system",   "type": "STRING",    "mode": "REQUIRED"},
         ],
         table_columns   = """
             driver_id, driver_code, full_name, phone_number, email,
-            nik, sim_number, license_plate, vehicle_type_id, vehicle_brand,
-            vehicle_model, vehicle_year, vehicle_color, home_zone_id,
-            rating, total_trips, status, joined_at, updated_at
+            nik, sim_number, license_plate, vehicle_type_id,
+            birth_date, gender, home_zone_id, referral_code, is_verified,
+            total_trips, status, registered_at, updated_at
         """,
     ),
 
@@ -184,7 +186,7 @@ TABLE_CONFIGS = [
         merge_key       = "passenger_id",
         partition_field = "updated_at",
         partition_type  = "MONTH",
-        cluster_fields  = ["status", "gender", "home_zone_id"],
+        cluster_fields  = ["status", "home_zone_id"],
         source_system   = "ride_ops_pg",
         append_only     = False,
         schema_fields   = [
@@ -220,7 +222,7 @@ TABLE_CONFIGS = [
         bq_final_table  = "rides",
         merge_key       = "ride_id",
         partition_field = "requested_at",
-        partition_type  = "DAY",
+        partition_type  = "MONTH",
         cluster_fields  = ["ride_status", "driver_id", "passenger_id", "pickup_zone_id"],
         source_system   = "ride_ops_pg",
         append_only     = False,
@@ -280,7 +282,7 @@ TABLE_CONFIGS = [
         bq_final_table  = "ride_events",
         merge_key       = "event_id",
         partition_field = "occurred_at",
-        partition_type  = "DAY",
+        partition_type  = "MONTH",
         cluster_fields  = ["event_type", "ride_id"],
         json_fields     = ["event_payload"],
         source_system   = "ride_ops_pg",
@@ -299,6 +301,7 @@ TABLE_CONFIGS = [
         """,
     ),
 ]
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  DAG
