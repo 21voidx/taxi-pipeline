@@ -34,7 +34,8 @@ SELECT
   longitude,
   is_active,
   created_at,
-  CURRENT_TIMESTAMP() AS _ingested_at
+  CURRENT_TIMESTAMP() AS _ingested_at,
+  'postgresql' AS _source_system
 FROM deduplicated_zones;
 
 MERGE INTO `{{ params.project_id }}.dev_label.zones` T
@@ -49,7 +50,8 @@ WHEN MATCHED THEN
     T.longitude = S.longitude,
     T.is_active = S.is_active,
     T.created_at = S.created_at,
-    T._ingested_at = S._ingested_at
+    T._ingested_at = S._ingested_at,
+    T._source_system = S._source_system
 
 WHEN NOT MATCHED THEN
   INSERT (
@@ -61,7 +63,8 @@ WHEN NOT MATCHED THEN
     longitude,
     is_active,
     created_at,
-    _ingested_at
+    _ingested_at,
+    _source_system
   )
   VALUES (
     S.zone_id,
@@ -72,5 +75,6 @@ WHEN NOT MATCHED THEN
     S.longitude,
     S.is_active,
     S.created_at,
-    S._ingested_at
+    S._ingested_at,
+    S._source_system
   );
