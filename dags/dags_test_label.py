@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # dari airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator 
 from helpers.BigQueryExecuteQueryOperator import BigQueryExecuteQueryOperator
 from airflow.sdk import TaskGroup
-from airflow.task.weight_rule import WeightRule
+from airflow.sdk import WeightRule
 from pendulum import timezone
 from airflow.sdk import Asset
 from airflow.sdk import Variable
