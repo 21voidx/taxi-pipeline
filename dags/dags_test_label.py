@@ -29,9 +29,9 @@ inside the JSON key, for example:
 ##                        Variable                           ##
 ##===========================================================##
 PARENT_DAG_NAME = "datamart_ride_ops_dim_zones"
-project_id = Variable.get('gcp_project', default_var='dbt-taxi-explore')
+project_id = Variable.get("gcp_project", default="dbt-taxi-explore")
 
-env_name = Variable.get("environment_name", default_var="development")
+env_name = Variable.get("environment_name", default="development")
 # alert_email = Variable.get('alert_email').split(";")
 ymd = "{{logical_date.strftime('%Y%m%d')}}"
 
