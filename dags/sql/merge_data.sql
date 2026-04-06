@@ -38,9 +38,7 @@ SELECT
   latitude,
   longitude,
   is_active,
-  created_at,
-  generate_uuid() AS extract_uuid,
-  current_timestamp() AS process_time
+  created_at
 FROM deduplicated_zones;
 
 
@@ -55,9 +53,7 @@ MERGE INTO `{{ params.project_id }}.dev_label.zones` T
       T.latitude = S.latitude,
       T.longitude = S.longitude,
       T.is_active = S.is_active,
-      T.created_at = S.created_at,
-      T.extract_uuid = S.extract_uuid,
-      T.process_time = S.process_time
+      T.created_at = S.created_at
         
   WHEN NOT MATCHED THEN
     INSERT (
@@ -78,7 +74,5 @@ MERGE INTO `{{ params.project_id }}.dev_label.zones` T
       S.latitude, 
       S.longitude, 
       S.is_active, 
-      S.created_at, 
-      S.extract_uuid, 
-      S.process_time
+      S.created_at
     );
