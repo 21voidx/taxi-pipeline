@@ -1,80 +1,66 @@
-CREATE TEMP TABLE temp_zones AS
-WITH raw_zones AS (
-  SELECT 
-    zone_id,
-    zone_code,
-    zone_name,
-    city,
-    latitude,
-    longitude,
-    is_active,
-    created_at
-  FROM `{{ params.project_id }}.dev_bronze_pg.zones`
-)
+CREATE TEMP TABLE temp_ride_events AS
+WITH raw_ride_events AS (
+  SELECT
+    event_id,
+    ride_id,
+    event_type,
+    event_payload,
+    occurred_at,
+    COALESCE(_source_system, 'postgres') AS _source_system
+  FROM `{{ params.project_id }}.dev_bronze_pg.ride_events`
+),
 
-, deduplicated_zones AS (
+deduplicated_ride_events AS (
+  -- Ambil record terakhir per event_id
+  -- Cocok jika source bronze bersifat append-only / CDC
   SELECT * EXCEPT(rn)
   FROM (
-    SELECT *,
+    SELECT
+      *,
       ROW_NUMBER() OVER (
-        PARTITION BY zone_code 
-        ORDER BY created_at DESC
+        PARTITION BY event_id
+        ORDER BY occurred_at DESC
       ) AS rn
-    FROM raw_zones
+    FROM raw_ride_events
   )
   WHERE rn = 1
 )
 
-SELECT 
-  zone_id,
-  zone_code,
-  zone_name,
-  city,
-  latitude,
-  longitude,
-  is_active,
-  created_at,
-  CURRENT_TIMESTAMP() AS _ingested_at,
-  'postgresql' AS _source_system
-FROM deduplicated_zones;
+SELECT
+  event_id,
+  ride_id,
+  event_type,
+  event_payload,
+  occurred_at,
+  _source_system
+FROM deduplicated_ride_events;
 
-MERGE INTO `{{ params.project_id }}.dev_label.zones` T
-USING temp_zones S
-ON T.zone_code = S.zone_code
+MERGE INTO `{{ params.project_id }}.dev_label.ride_events` T
+USING temp_ride_events S
+ON T.event_id = S.event_id
 
 WHEN MATCHED THEN
   UPDATE SET
-    T.zone_name = S.zone_name,
-    T.city = S.city,
-    T.latitude = S.latitude,
-    T.longitude = S.longitude,
-    T.is_active = S.is_active,
-    T.created_at = S.created_at,
-    T._ingested_at = S._ingested_at,
+    T.ride_id = S.ride_id,
+    T.event_type = S.event_type,
+    T.event_payload = S.event_payload,
+    T.occurred_at = S.occurred_at,
     T._source_system = S._source_system
 
 WHEN NOT MATCHED THEN
   INSERT (
-    zone_id,
-    zone_code,
-    zone_name,
-    city,
-    latitude,
-    longitude,
-    is_active,
-    created_at,
-    _ingested_at,
+    event_id,
+    ride_id,
+    event_type,
+    event_payload,
+    occurred_at,
     _source_system
   )
   VALUES (
-    S.zone_id,
-    S.zone_code,
-    S.zone_name,
-    S.city,
-    S.latitude,
-    S.longitude,
-    S.is_active,
-    S.created_at,
-    S._ingested_at,
+    S.event_id,
+    S.ride_id,
+    S.event_type,
+    S.event_payload,
+    S.occurred_at,
     S._source_system
   );

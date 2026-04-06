@@ -28,7 +28,7 @@ inside the JSON key, for example:
 ##===========================================================##
 ##                        Variable                           ##
 ##===========================================================##
-PARENT_DAG_NAME = "datamart_ride_ops_dim_zones"
+PARENT_DAG_NAME = "datamart_ride_events"
 project_id = Variable.get("gcp_project", default="dbt-taxi-explore")
 
 env_name = Variable.get("environment_name", default="development")
@@ -39,7 +39,7 @@ ymd = "{{logical_date.strftime('%Y%m%d')}}"
 ##                          Table                            ##
 ##===========================================================##
 # Target table untuk Asset/Lineage
-datamart_dim_zones = f"{project_id}.dev_label.zones"
+datamart_dim_zones = f"{project_id}.dev_label.ride_events"
 
 if env_name == "production":
     start_date = datetime(2026, 6, 1, tzinfo=timezone('Asia/Jakarta'))
@@ -98,7 +98,7 @@ with TaskGroup(dag=dag, group_id="process_dim_zones", prefix_group_id=False,
 
     # Memanggil script SQL merge yang sudah kita buat sebelumnya
     task_merge_zones = BigQueryExecuteQueryOperator(
-        task_id='merge_data_zones',
+        task_id='merge_data_ride_events',
         sql='sql/merge_data.sql',
         params=dict(
             project_id=project_id
