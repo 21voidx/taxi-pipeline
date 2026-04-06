@@ -16,7 +16,7 @@ class BigQueryExecuteQueryOperator(BigQueryInsertJobOperator):
         *,
         sql: str,
         destination_dataset_table: str = None,
-        gcp_conn_id: str = 'gcp.bqnrt_01',
+        gcp_conn_id: str = 'google_cloud_default',
         write_disposition: str = 'WRITE_TRUNCATE',
         create_disposition: str = 'CREATE_IF_NEEDED',
         use_legacy_sql: bool = False,
