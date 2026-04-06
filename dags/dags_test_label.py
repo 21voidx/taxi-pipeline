@@ -105,6 +105,7 @@ with TaskGroup(dag=dag, group_id="process_dim_zones", prefix_group_id=False,
         ),
         outlets=[Asset(datamart_dim_zones)],
         use_legacy_sql=False,
+        labels={"table": "zones", "source": "dev_bronze_pg", "target": "dev_label"},
         dag=dag
     )
     
