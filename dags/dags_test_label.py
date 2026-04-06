@@ -4,7 +4,7 @@
 from datetime import datetime, timedelta
 # Asumsi kamu menggunakan custom operator atau standard bigquery operator
 # dari airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator 
-from helper.BigQueryExecuteQueryOperator import BigQueryExecuteQueryOperator
+from helpers.BigQueryExecuteQueryOperator import BigQueryExecuteQueryOperator
 from airflow.sdk import TaskGroup
 from airflow.task.weight_rule import WeightRule
 from pendulum import timezone
