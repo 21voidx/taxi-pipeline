@@ -68,9 +68,7 @@ MERGE INTO `{{ params.project_id }}.dev_label.zones` T
       latitude, 
       longitude, 
       is_active, 
-      created_at, 
-      extract_uuid, 
-      process_time
+      created_at
     )
     VALUES (
       S.zone_id, 
