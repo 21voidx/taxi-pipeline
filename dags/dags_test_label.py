@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # dari airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator 
 from helpers.BigQueryExecuteQueryOperator import BigQueryExecuteQueryOperator
 from airflow.sdk import TaskGroup
-from airflow.sdk import WeightRule
+# from airflow.sdk import WeightRule
 from pendulum import timezone
 from airflow.sdk import Asset
 from airflow.sdk import Variable
@@ -94,7 +94,7 @@ task_params_eval = PythonOperator(
 )
     
 with TaskGroup(dag=dag, group_id="process_dim_zones", prefix_group_id=False,
-               default_args={'weight_rule': WeightRule.UPSTREAM}) as group_dim_zones:
+               default_args={'weight_rule': 'upstream'}) as group_dim_zones:
 
     # Memanggil script SQL merge yang sudah kita buat sebelumnya
     task_merge_zones = BigQueryExecuteQueryOperator(
