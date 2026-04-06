@@ -9,7 +9,7 @@ WITH raw_zones AS (
     longitude,
     is_active,
     created_at
-  FROM `postgresql.public.zones`
+  FROM `{{ params.project_id }}.dev_bronze_pg.zones`
   -- Opsional: Jika tabelnya besar, aktifkan filter tanggal di bawah ini.
   -- Karena tabel zones ini kecil (master data), full-scan biasanya tidak masalah dan lebih aman.
   -- WHERE date(created_at, 'Asia/Jakarta') >= DATE('{{ task_instance.xcom_pull(task_ids="params_eval", key="start_date") }}')
