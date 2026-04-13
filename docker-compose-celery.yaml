@@ -181,6 +181,7 @@ services:
     image: trinodb/trino:477
     container_name: taxi-trino
     network_mode: host
+    # port tidak digunakan karena menggunakan network host, tapi tetap expose untuk healthcheck
     ports:
       - "8082:8081"
     volumes:
