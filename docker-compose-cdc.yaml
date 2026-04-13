@@ -68,6 +68,7 @@ services:
       context: ./kafka-connect
       dockerfile: Dockerfile
     container_name: kafka-connect
+    network_mode: host
     dns:
       - 8.8.8.8
       - 1.1.1.1
