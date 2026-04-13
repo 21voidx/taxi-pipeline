@@ -79,7 +79,7 @@ services:
         condition: service_healthy
     environment:
       # CONNECT_BOOTSTRAP_SERVERS: kafka:29092
-      CONNECT_BOOTSTRAP_SERVERS: localhost:29092
+      CONNECT_BOOTSTRAP_SERVERS: 127.0.0.1:29092
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
       CONNECT_REST_PORT: 8083
       CONNECT_GROUP_ID: cdc-connect-cluster
@@ -93,11 +93,11 @@ services:
       CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
       # CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       # diganti karena menggunakan network host
-      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://localhost:8081
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://127.0.0.1:8081
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       # CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       # diganti karena menggunakan network host
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://localhost:8081
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://127.0.0.1:8081
       CONNECT_PLUGIN_PATH: >-
         /usr/share/java,
         /usr/share/confluent-hub-components,
