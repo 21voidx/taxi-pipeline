@@ -180,7 +180,7 @@ services:
   trino:
     image: trinodb/trino:477
     container_name: taxi-trino
-    # network_mode: host
+    network_mode: host
     ports:
       - "8082:8081"
     volumes:
