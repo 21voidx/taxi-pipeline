@@ -1,4 +1,4 @@
-service:
+services:
   data-generator:
     build:
       context: ./data-generator/generator
