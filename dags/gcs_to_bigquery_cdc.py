@@ -46,13 +46,14 @@ TOPIC_TABLE_MAPPINGS = [
 
 def build_hourly_prefix(topic: str) -> str:
     """Build GCS prefix that matches the Kafka Connect sink folder layout."""
-    return (
-        f"raw/cdc/topic={topic}/"
-        "year={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%Y') }}/"
-        "month={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%m') }}/"
-        "day={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%d') }}/"
-        "hour={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%H') }}/"
-    )
+    return f"raw/cdc/{topic}/"
+    # return (
+    #     f"raw/cdc/topic={topic}/"
+    #     "year={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%Y') }}/"
+    #     "month={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%m') }}/"
+    #     "day={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%d') }}/"
+    #     "hour={{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%H') }}/"
+    # )
 
 
 @task
