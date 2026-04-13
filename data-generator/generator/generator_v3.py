@@ -18,14 +18,14 @@ from pymongo import MongoClient, ASCENDING
 faker = Faker("id_ID")
 
 DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
+    "host": os.getenv("DB_HOST", "postgres-ops"),
     "port": int(os.getenv("DB_PORT", "5432")),
     "dbname": os.getenv("DB_NAME", "ride_ops_pg"),
     "user": os.getenv("DB_USER", "postgres"),
     "password": os.getenv("DB_PASSWORD", "postgres"),
 }
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb:27017/?replicaSet=rs0")
 MONGO_DB = os.getenv("MONGO_DB", "ride_ops_mg")
 MONGO_RIDE_EVENTS_COLLECTION = os.getenv("MONGO_RIDE_EVENTS_COLLECTION", "ride_events")
 MONGO_DRIVER_LOCATIONS_COLLECTION = os.getenv("MONGO_DRIVER_LOCATIONS_COLLECTION", "driver_location_stream")
