@@ -78,7 +78,8 @@ services:
       schema-registry:
         condition: service_healthy
     environment:
-      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      # CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_BOOTSTRAP_SERVERS: localhost:29092
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
       CONNECT_REST_PORT: 8083
       CONNECT_GROUP_ID: cdc-connect-cluster
@@ -90,9 +91,13 @@ services:
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
       CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # diganti karena menggunakan network host
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://localhost:8081
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # diganti karena menggunakan network host
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://localhost:8081
       CONNECT_PLUGIN_PATH: >-
         /usr/share/java,
         /usr/share/confluent-hub-components,
@@ -113,8 +118,9 @@ services:
     volumes:
       # - ./minio/minio.properties:/opt/kafka/secrets/minio.properties:ro
       - ./credentials/service-account.json:/opt/kafka/secrets/gcp/service-account.json:ro
-    networks:
-      - taxi-network
+    # tidak digunakan karena menggunakan network host
+    # networks:
+    #   - taxi-network
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors || exit 1"]
       interval: 15s
@@ -158,8 +164,10 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: cdc-connect
-      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://host.docker.internal:8083
       DYNAMIC_CONFIG_ENABLED: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8085:8080"
     networks:
