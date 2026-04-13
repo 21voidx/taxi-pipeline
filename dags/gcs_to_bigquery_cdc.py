@@ -23,10 +23,10 @@ from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQue
 DAG_ID = "gcs_to_bigquery_cdc_hourly"
 TZ = os.getenv("AIRFLOW_TIMEZONE", "Asia/Jakarta")
 GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "dbt-taxi-explore-bucket")
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "your-gcp-project")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "dbt-taxi-explore")
 BQ_DATASET = os.getenv("BQ_DATASET_RAW", "raw_cdc")
 GCP_CONN_ID = os.getenv("AIRFLOW_GCP_CONN_ID", "google_cloud_default")
-BQ_LOCATION = os.getenv("BQ_LOCATION", "asia-southeast2")
+BQ_LOCATION = os.getenv("BQ_LOCATION", "us")
 SCHEDULE = os.getenv("AIRFLOW_GCS_TO_BQ_SCHEDULE", "0 * * * *")
 
 TOPIC_TABLE_MAPPINGS = [
@@ -66,8 +66,8 @@ def ensure_files_exist(objects: list[str] | None, topic: str) -> list[str]:
 @dag(
     dag_id=DAG_ID,
     schedule=SCHEDULE,
-    start_date=pendulum.datetime(2026, 4, 1, tz=TZ),
-    catchup=False,
+    start_date=pendulum.datetime(2026, 4, 13, tz=TZ),
+    catchup=True,
     max_active_runs=1,
     default_args={"retries": 1},
     tags=["cdc", "gcs", "bigquery", "raw"],
