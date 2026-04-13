@@ -121,10 +121,7 @@ def gcs_to_bigquery_cdc_hourly():
                 f"Raw CDC load from GCS prefix for topic {topic}. "
                 "Loaded by Airflow GCSToBigQueryOperator."
             ),
-            job_id=(
-                f"{DAG_ID}__{table}__"
-                "{{ data_interval_start.in_timezone('Asia/Jakarta').strftime('%Y%m%d%H') }}"
-            ),
+            # HAPUS BARIS job_id DI SINI
             force_rerun=False,
         )
 
