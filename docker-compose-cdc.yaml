@@ -72,6 +72,7 @@ services:
     # Tambahkan bagian ini untuk memetakan nama 'mongodb' ke localhost
     extra_hosts:
       - "mongodb:127.0.0.1"
+      - "kafka:127.0.0.1"
     dns:
       - 8.8.8.8
       - 1.1.1.1
