@@ -3,9 +3,6 @@ services:
     build:
       context: ./data-generator/generator
     container_name: taxi-data-generator
-    depends_on:
-      postgres-ops:
-        condition: service_healthy
     environment:
       DB_HOST: postgres-ops
       DB_PORT: 5432
