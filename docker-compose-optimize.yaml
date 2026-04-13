@@ -1,0 +1,799 @@
+# ══════════════════════════════════════════════════════════════════════════
+#  Full Platform Stack – Merged & Optimized
+#  Target: 6 vCPU · 16 GB RAM · 40 GB storage
+#
+#  ┌─ Orchestration (Airflow CeleryExecutor + host-net) ───────────────────
+#  │   apiserver · scheduler · dag-processor · worker · triggerer · init
+#  ├─ Query Layer ─────────────────────────────────────────────────────────
+#  │   trino (host-net, JVM heap capped at 2 GB)
+#  ├─ CDC Pipeline ────────────────────────────────────────────────────────
+#  │   postgres-ops → kafka (KRaft) → schema-registry → kafka-connect → minio
+#  │   kafka-ui  [optional – docker compose --profile monitoring up]
+#  ├─ Supporting ──────────────────────────────────────────────────────────
+#  │   postgres (Airflow meta-DB) · redis (Celery broker)
+#  └─ Simulation ──────────────────────────────────────────────────────────
+#      data-generator
+#
+#  Resource budget (≈ 9.2 GB active, OS gets ≈ 3 GB, headroom ≈ 3.8 GB):
+#    Trino           3.0 GB / 1.50 CPU
+#    Kafka           1.0 GB / 0.50 CPU
+#    Kafka Connect   1.0 GB / 0.75 CPU
+#    Schema Reg.     0.4 GB / 0.25 CPU
+#    postgres-ops    0.5 GB / 0.50 CPU
+#    Airflow ×5      2.3 GB / 1.50 CPU
+#    postgres        0.3 GB / 0.25 CPU
+#    redis           0.2 GB / 0.10 CPU
+#    minio           0.3 GB / 0.25 CPU
+#    data-gen        0.1 GB / 0.20 CPU
+#    ─────────────────────────────
+#    Total          ~9.4 GB / ~5.8 CPU
+#
+#  Storage targets (total ≈ 40 GB):
+#    Docker images   ≈ 8 GB   (pulled once)
+#    Kafka data      ≈ 1 GB   (6 h retention + 512 MB/partition cap)
+#    MinIO/Parquet   ≈ 5 GB
+#    PostgreSQL      ≈ 3 GB
+#    Airflow logs    ≈ 1 GB   (7-day, json-file capped at 10 MB×3)
+#    OS + overlay    ≈ 8 GB
+#    Buffer          ≈ 14 GB
+#
+#  Port map:
+#    :8080 Airflow UI (host-net)    :8081 Trino (host-net)
+#    :8082 Schema Registry (host)   :8083 Kafka Connect
+#    :8090 Kafka UI (--profile monitoring)
+#    :9000/:9001 MinIO S3/Console   :9092 Kafka (external)
+#    :5432 postgres · :5433 postgres-ops · :6379 Redis
+#
+#  REQUIRED – update ./trino/etc/jvm.config before first start:
+#    -server
+#    -Xmx2G
+#    -XX:+UseG1GC
+#    -XX:G1HeapRegionSize=32M
+#    -XX:+ExplicitGCInvokesConcurrent
+#    -XX:+HeapDumpOnOutOfMemoryError
+#    -XX:HeapDumpPath=/var/log/trino/
+#    -XX:+ExitOnOutOfMemoryError
+#    -Djdk.attach.allowAttachSelf=true
+#    -Djdk.nio.maxCachedBufferSize=2000000
+#    -XX:ReservedCodeCacheSize=256M
+#
+#  REQUIRED – update ./trino/etc/config.properties:
+#    query.max-memory=1GB
+#    query.max-memory-per-node=1GB
+#    query.max-total-memory-per-node=2GB
+# ══════════════════════════════════════════════════════════════════════════
+
+---
+
+# ── Shared log-rotation (applied to every service) ──────────────────────
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# ── Airflow common anchor ────────────────────────────────────────────────
+x-airflow-common:
+  &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    network: host
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: 'airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager'
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: 'postgresql+psycopg2://airflow:airflow@127.0.0.1:5432/airflow'
+    AIRFLOW__CELERY__RESULT_BACKEND: 'db+postgresql://airflow:airflow@127.0.0.1:5432/airflow'
+    AIRFLOW__CELERY__BROKER_URL: 'redis://:@127.0.0.1:6379/0'
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+    AIRFLOW__CORE__SECRET_KEY: ${AIRFLOW__CORE__SECRET_KEY}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET}
+    AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.getfqdn"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://127.0.0.1:8080/execution/'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # ── Concurrency limits (tuned for 6-core / 16 GB host) ─────────────
+    AIRFLOW__CORE__PARALLELISM: '8'
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: '4'
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: '4'
+    AIRFLOW__SCHEDULER__MAX_DAGRUNS_TO_CREATE_PER_LOOP: '5'
+    AIRFLOW__SCHEDULER__PARSING_PROCESSES: '1'
+    # ── Log retention ───────────────────────────────────────────────────
+    AIRFLOW__LOG__LOG_RETENTION_DAYS: '7'
+    AIRFLOW__LOGGING__LOG_RETENTION_DAYS: '7'
+    # ── Misc ────────────────────────────────────────────────────────────
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    GOOGLE_APPLICATION_CREDENTIALS: /opt/gcp/service-account.json
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ./credentials/service-account.json:/opt/gcp/service-account.json:ro
+    - /var/run/docker.sock:/var/run/docker.sock
+  user: "${AIRFLOW_UID:-50000}:0"
+  group_add:
+    - "989"
+  dns:
+    - 8.8.8.8
+    - 1.1.1.1
+  logging: *default-logging
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+    postgres-ops:
+      condition: service_healthy
+    trino:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+# ════════════════════════════════════════════════════════════════════════
+services:
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  AIRFLOW – Meta-database
+  # ──────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:14-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    command: >
+      postgres
+        -c shared_buffers=64MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=32MB
+        -c max_connections=50
+        -c wal_buffers=4MB
+        -c checkpoint_completion_target=0.9
+        -c synchronous_commit=off
+    ports:
+      - "5432:5432"
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - taxi-network
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  POSTGRESQL – Operational DB (CDC source + Airflow/Trino query target)
+  #  Dual-network: taxi-network (Airflow/Trino) + cdc-net (Debezium)
+  # ──────────────────────────────────────────────────────────────────────
+  postgres-ops:
+    image: postgres:15-alpine
+    container_name: taxi-postgres-ops
+    environment:
+      POSTGRES_DB: ride_ops_pg
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      postgres
+        -c wal_level=logical
+        -c max_replication_slots=5
+        -c max_wal_senders=5
+        -c wal_keep_size=256
+        -c shared_preload_libraries=pgoutput
+        -c log_replication_commands=on
+        -c shared_buffers=128MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=64MB
+        -c max_connections=100
+        -c wal_buffers=8MB
+        -c checkpoint_completion_target=0.9
+        -c synchronous_commit=off
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-ops-data:/var/lib/postgresql/data
+      - ./data-generator/postgres/init.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ride_ops_pg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - taxi-network
+      - cdc-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  REDIS  – Celery broker (no persistence, 128 MB hard cap)
+  # ──────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-bookworm
+    container_name: taxi-redis
+    command: >
+      redis-server
+        --maxmemory 128mb
+        --maxmemory-policy allkeys-lru
+        --save ""
+        --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+    restart: always
+    networks:
+      - taxi-network
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 192M
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  TRINO  – Federated query engine (host-net)
+  #  Heap is controlled by jvm.config (-Xmx2G); JAVA_TOOL_OPTIONS is a
+  #  fallback in case the mounted config is missing or wrong.
+  # ──────────────────────────────────────────────────────────────────────
+  trino:
+    image: trinodb/trino:477
+    container_name: taxi-trino
+    network_mode: host
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog
+      - ./trino/etc/jvm.config:/etc/trino/jvm.config
+      - ./trino/etc/config.properties:/etc/trino/config.properties
+      - ./credentials/service-account.json:/opt/gcp/service-account.json:ro
+    environment:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      JAVA_TOOL_OPTIONS: "-Xmx2G"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      postgres-ops:
+        condition: service_healthy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '1.50'
+          memory: 3G
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  KAFKA  (KRaft – no ZooKeeper)
+  #  Heap 512 MB · retention 6 h + 512 MB/partition · 1 partition default
+  # ──────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_NUM_PARTITIONS: 1               # reduced: saves disk I/O + memory
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 6          # was 168 → major storage saver
+      KAFKA_LOG_RETENTION_BYTES: 536870912  # 512 MB per partition hard cap
+      KAFKA_LOG_SEGMENT_BYTES: 134217728    # 128 MB segments → faster cleanup
+      KAFKA_LOG_CLEANUP_POLICY: delete
+      KAFKA_COMPRESSION_TYPE: lz4
+      KAFKA_MESSAGE_MAX_BYTES: 5242880      # 5 MB (was 10 MB)
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 5242880
+      KAFKA_NUM_NETWORK_THREADS: 2          # reduced from default 3
+      KAFKA_NUM_IO_THREADS: 4
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - cdc-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 1G
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  SCHEMA REGISTRY
+  #  Host port 8082 – Trino owns host:8081 via host-net
+  # ──────────────────────────────────────────────────────────────────────
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.0
+    container_name: schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HEAP_OPTS: "-Xmx256m -Xms128m"
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: full
+    ports:
+      - "8082:8081"
+    networks:
+      - cdc-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 384M
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  KAFKA CONNECT  (Debezium source + S3/MinIO Parquet sink)
+  # ──────────────────────────────────────────────────────────────────────
+  kafka-connect:
+    build:
+      context: ./kafka-connect
+      dockerfile: Dockerfile
+    container_name: kafka-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      postgres-ops:
+        condition: service_healthy
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: cdc-connect-cluster
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_PLUGIN_PATH: >-
+        /usr/share/java,
+        /usr/share/confluent-hub-components,
+        /data/connect-jars
+      CONNECT_LOG4J_LOGGERS: >-
+        org.apache.zookeeper=ERROR,
+        org.I0Itec.zkclient=ERROR,
+        org.reflections=ERROR
+      CONNECT_TASK_SHUTDOWN_GRACEFUL_TIMEOUT_MS: 10000
+      CONNECT_PRODUCER_COMPRESSION_TYPE: lz4
+      CONNECT_PRODUCER_BATCH_SIZE: 32768    # reduced from 65536 → lower memory pressure
+      CONNECT_PRODUCER_LINGER_MS: 200       # higher linger → better batching at low CPU
+      CONNECT_PRODUCER_MAX_REQUEST_SIZE: 5242880
+      CONNECT_CONSUMER_FETCH_MIN_BYTES: 50000
+      CONNECT_CONSUMER_FETCH_MAX_WAIT_MS: 500
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./minio/minio.properties:/opt/kafka/secrets/minio.properties:ro
+    networks:
+      - cdc-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 1G
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  MINIO  (Object Storage – S3-compatible)
+  # ──────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_VOLUMES: /data
+      MINIO_API_SELECT_PARQUET: "on"
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - cdc-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  KAFKA UI  – optional monitoring
+  #  Start with: docker compose --profile monitoring up -d kafka-ui
+  # ──────────────────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    profiles:
+      - monitoring
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: cdc-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: cdc-connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+      DYNAMIC_CONFIG_ENABLED: "true"
+      JAVA_OPTS: "-Xmx192m"
+    ports:
+      - "8090:8080"
+    networks:
+      - cdc-net
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  DATA GENERATOR
+  # ──────────────────────────────────────────────────────────────────────
+  data-generator:
+    build:
+      context: ./data-generator/generator
+    container_name: taxi-data-generator
+    depends_on:
+      postgres-ops:
+        condition: service_healthy
+    environment:
+      DB_HOST: taxi-postgres-ops
+      DB_PORT: 5432
+      DB_NAME: ride_ops_pg
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Jakarta
+      SIM_START_AT: '2026-01-01T00:00:00+07:00'
+      SIM_SPEED: '60'
+      TICK_SECONDS: '1'
+      RIDES_PER_TICK_WEEKDAY_BASE: '2'
+      RIDES_PER_TICK_WEEKEND_BASE: '3'
+      INITIAL_DRIVERS: '150'
+      INITIAL_PASSENGERS: '600'
+      MAX_OPEN_RIDES: '400'
+      RANDOM_SEED: '42'
+    networks:
+      - taxi-network
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 128M
+
+  # ══════════════════════════════════════════════════════════════════════
+  #  AIRFLOW SERVICES  (all host-net; reach redis/postgres via 127.0.0.1)
+  # ══════════════════════════════════════════════════════════════════════
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: taxi-airflow-apiserver
+    command: api-server
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: taxi-airflow-scheduler
+    command: scheduler
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: taxi-airflow-dag-processor
+    command: dag-processor
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 384M
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    container_name: taxi-airflow-worker
+    hostname: airflow-worker
+    network_mode: host
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+      AIRFLOW__CORE__HOSTNAME_CALLABLE: "airflow.utils.net.getfqdn"
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-apiserver:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 384M
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: taxi-airflow-init
+    network_mode: host
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        if [[ -z "${AIRFLOW_UID}" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
+          echo "If you are on Linux, you SHOULD follow the instructions below to set "
+          echo "AIRFLOW_UID environment variable, otherwise files will be owned by root."
+          echo "For other operating systems you can get rid of the warning with manually created .env file:"
+          echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
+          echo
+          export AIRFLOW_UID=$$(id -u)
+        fi
+        one_meg=1048576
+        mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
+        cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
+        disk_available=$$(df / | tail -1 | awk '{print $$4}')
+        warning_resources="false"
+        if (( mem_available < 4000 )) ; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough memory available for Docker.\e[0m"
+          echo "At least 4GB of memory required. You have $$(numfmt --to iec $$((mem_available * one_meg)))"
+          echo
+          warning_resources="true"
+        fi
+        if (( cpus_available < 2 )); then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough CPUS available for Docker.\e[0m"
+          echo "At least 2 CPUs recommended. You have $${cpus_available}"
+          echo
+          warning_resources="true"
+        fi
+        if (( disk_available < one_meg * 10 )); then
+          echo
+          echo -e "\033[1;33mWARNING!!!: Not enough Disk space available for Docker.\e[0m"
+          echo "At least 10 GBs recommended. You have $$(numfmt --to iec $$((disk_available * 1024 )))"
+          echo
+          warning_resources="true"
+        fi
+        if [[ $${warning_resources} == "true" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING!!!: You have not enough resources to run Airflow (see above)!\e[0m"
+          echo "Please follow the instructions to increase amount of resources available:"
+          echo "   https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#before-you-begin"
+          echo
+        fi
+        echo
+        echo "Creating missing opt dirs if missing:"
+        echo
+        mkdir -v -p /opt/airflow/{logs,dags,plugins,config}
+        echo
+        echo "Airflow version:"
+        /entrypoint airflow version
+        echo
+        echo "Files in shared volumes:"
+        echo
+        ls -la /opt/airflow/{logs,dags,plugins,config}
+        echo
+        echo "Running airflow config list to create default config file if missing."
+        echo
+        /entrypoint airflow config list >/dev/null
+        echo
+        echo "Files in shared volumes:"
+        echo
+        ls -la /opt/airflow/{logs,dags,plugins,config}
+        echo
+        echo "Change ownership of files in /opt/airflow to ${AIRFLOW_UID}:0"
+        echo
+        chown -R "${AIRFLOW_UID}:0" /opt/airflow/
+        echo
+        echo "Change ownership of files in shared volumes to ${AIRFLOW_UID}:0"
+        echo
+        chown -v -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags,plugins,config}
+        echo
+        echo "Files in shared volumes:"
+        echo
+        ls -la /opt/airflow/{logs,dags,plugins,config}
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+    user: "0:0"
+
+  airflow-cli:
+    <<: *airflow-common
+    container_name: taxi-airflow-cli
+    network_mode: host
+    profiles:
+      - debug
+    environment:
+      <<: *airflow-common-env
+      CONNECTION_CHECK_MAX_COUNT: "0"
+    command:
+      - bash
+      - -c
+      - airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-ops:
+        condition: service_healthy
+      trino:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+# ════════════════════════════════════════════════════════════════════════
+volumes:
+  airflow-db-data:
+  airflow-logs:
+  postgres-ops-data:
+  kafka-data:
+  minio-data:
+
+networks:
+  taxi-network:
+    driver: bridge
+    name: Taxi-platform-network
+
+  cdc-net:
+    driver: bridge

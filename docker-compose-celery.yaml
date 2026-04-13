@@ -67,8 +67,8 @@ x-airflow-common:
       condition: service_healthy
     trino:
       condition: service_healthy
-    mysql:
-      condition: service_healthy
+    # mysql:
+    #   condition: service_healthy
     redis:
       condition: service_healthy
 
@@ -107,7 +107,11 @@ services:
     command: >
       postgres
         -c wal_level=logical
-        -c max_replication_slots=5
+        -c max_replication_slots=10
+        -c max_wal_senders=10
+        -c wal_keep_size=1024
+        -c shared_preload_libraries=pgoutput
+        -c log_replication_commands=on
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ride_ops_pg"]
       interval: 10s
@@ -117,39 +121,68 @@ services:
     networks:
       - taxi-network
 
-  mysql:
-    image: mysql:8-debian
-    container_name: taxi-mysql
-    environment:
-      MYSQL_DATABASE: ride_marketing_mysql
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      TZ: Asia/Jakarta
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
-      - "3307:3306"
+      - "27017:27017"
     volumes:
-      - mysql-data:/var/lib/mysql
-      - ./data-generator/mysql/init.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./trino/mysql.cnf:/etc/mysql/conf.d/taxi.cnf
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      - mongodb-data:/data/db
     networks:
       - taxi-network
-    labels:
-      com.taxi.service: "source-db"
-      com.taxi.tier: "source"
+
+  # mongo-express:
+  #   image: mongo-express:latest
+  #   container_name: mongo-express
+  #   restart: always
+  #   environment:
+  #     ME_CONFIG_MONGODB_SERVER: mongodb
+  #     ME_CONFIG_MONGODB_PORT: 27017
+  #     ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME:-mongo_admin}
+  #     ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-mongo_password}
+  #     ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USERNAME:-express_user}
+  #     ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-express_password}
+  #   ports:
+  #     - "8082:8081"
+  #   networks:
+  #     - taxi-network
+  #   depends_on:
+  #     - mongodb
+
+  # mysql:
+  #   image: mysql:8-debian
+  #   container_name: taxi-mysql
+  #   environment:
+  #     MYSQL_DATABASE: ride_marketing_mysql
+  #     MYSQL_USER: ${MYSQL_USER}
+  #     MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+  #     MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+  #     TZ: Asia/Jakarta
+  #   ports:
+  #     - "3307:3306"
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
+  #     - ./data-generator/mysql/init.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+  #     - ./trino/mysql.cnf:/etc/mysql/conf.d/taxi.cnf
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 30s
+  #   networks:
+  #     - taxi-network
+  #   labels:
+  #     com.taxi.service: "source-db"
+  #     com.taxi.tier: "source"
 
   trino:
     image: trinodb/trino:477
     container_name: taxi-trino
-    network_mode: host
+    # network_mode: host
     ports:
-      - "8081:8080"
+      - "8082:8081"
     volumes:
       - ./trino/catalog:/etc/trino/catalog
       - ./trino/etc/jvm.config:/etc/trino/jvm.config
@@ -172,8 +205,8 @@ services:
     depends_on:
       postgres-ops:
         condition: service_healthy
-      mysql:
-        condition: service_healthy
+      # mysql:
+      #   condition: service_healthy
 
   redis:
     image: redis:7.2-bookworm
@@ -393,43 +426,20 @@ services:
         condition: service_healthy
       trino:
         condition: service_healthy
-      mysql:
-        condition: service_healthy
+      # mysql:
+      #   condition: service_healthy
       redis:
         condition: service_healthy
 
-  data-generator:
-    build:
-      context: ./data-generator/generator
-      dockerfile: Dockerfile
-      network: host
-    container_name: Taxi-data-generator
-    environment:
-      POSTGRES_HOST: postgres-ops
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ride_ops_pg
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: ride_marketing_mysql
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    depends_on:
-      postgres-ops:
-        condition: service_healthy
-      mysql:
-        condition: service_healthy
-    networks:
-      - taxi-network
 
 volumes:
   postgres-ops-data:
   airflow-db-data:
   airflow-logs:
-  mysql-data:
+  mongodb-data:
+  # mysql-data:
 
 networks:
   taxi-network:
-    driver: bridge
-    name: Taxi-platform-network
+    # driver: bridge
+    external: true
