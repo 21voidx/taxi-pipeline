@@ -69,6 +69,9 @@ services:
       dockerfile: Dockerfile
     container_name: kafka-connect
     network_mode: host
+    # Tambahkan bagian ini untuk memetakan nama 'mongodb' ke localhost
+    extra_hosts:
+      - "mongodb:127.0.0.1"
     dns:
       - 8.8.8.8
       - 1.1.1.1
