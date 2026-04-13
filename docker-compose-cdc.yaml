@@ -68,6 +68,9 @@ services:
       context: ./kafka-connect
       dockerfile: Dockerfile
     container_name: kafka-connect
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       kafka:
         condition: service_healthy
