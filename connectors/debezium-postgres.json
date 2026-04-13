@@ -4,7 +4,7 @@
     "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "tasks.max": "1",
     "database.hostname": "127.0.0.1",
-    "database.port": "5432",
+    "database.port": "5433",
     "database.user": "debezium",
     "database.password": "debezium",
     "database.dbname": "ride_ops_pg",
