@@ -1,92 +1,52 @@
-# 🏦 Banking Data Platform — End-to-End Data Engineering Portfolio
+# 🚕 Dummy Taxi Pipeline
 
-> **Production-grade batch analytics pipeline for banking domain**  
-> Multi-source ingestion → Trino federation → BigQuery → dbt → Looker
+A **end-to-end data engineering playground** that simulates a ride-hailing platform (à la Gojek/Grab) — from synthetic data generation all the way to analytics-ready Gold marts in BigQuery.
+
+The project is intentionally self-contained: spin up the Docker Compose stacks, register the Kafka Connect connectors, trigger the Airflow DAGs, and you have a fully running modern data stack on your laptop.
 
 ---
 
 ## 📐 Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          SOURCE SYSTEMS                                     │
-│                                                                             │
-│  ┌────────────────────── ┐        ┌──────────────────────────────────────┐  │
-│  │  PostgreSQL 15        │        │  MySQL 8.0                           │  │
-│  │  (Core Banking)       │        │  (Transaction System)                │  │
-│  │                       │        │                                      │  │
-│  │  • customers          │        │  • transactions                      │  │
-│  │  • accounts           │        │  • merchants                         │  │
-│  │  • branches           │        │  • fraud_flags                       │  │
-│  │  • employees          │        │  • payment_methods                   │  │
-│  │  • loan_applications  │        │  • transaction_types                 │  │
-│  │  • credit_scores      │        │                                      │  │
-│  │                       │        │  [WAL/binlog pre-configured          │  │
-│  │  [wal_level=logical   │        │   for future CDC via Debezium]       │  │
-│  │   pre-configured]     │        │                                      │  │
-│  └──────────┬─────────── ┘        └───────────────┬──────────────────────┘  │
-│             │                                     │                         │
-└─────────────┼─────────────────────────────────────┼─────────────────────────┘
-              │                                     │
-              ▼                                     ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         QUERY FEDERATION LAYER                              │
-│                                                                             │
-│                    ┌──────────────────────────┐                             │
-│                    │   Trino (Query Engine)    │                            │
-│                    │                           │                            │
-│                    │  Catalogs:                │                            │
-│                    │  • postgresql (connector) │                            │
-│                    │  • mysql     (connector)  │                            │
-│                    │  • bigquery  (connector)  │                            │
-│                    └──────────────┬────────────┘                            │
-│                                   │                                         │
-└───────────────────────────────────┼─────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     ORCHESTRATION (Apache Airflow 2.8)                      │
-│                                                                             │
-│  DAGs:                                                                      │
-│  ├── dag_core_banking       (Postgres → BigQuery raw)                       │
-│  ├── dag_transactions       (MySQL → BigQuery raw)                          │
-│  └── dbt_transformation     (BigQuery raw → staging → marts)                │  │                                                                             │
-└───────────────────────────────────┬─────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   DATA WAREHOUSE (Google BigQuery)                          │
-│                                                                             │
-│  Dataset: raw_core_banking      ← Airflow (Postgres extract)                │
-│  Dataset: raw_transactions      ← Airflow (MySQL extract)                   │
-│  Dataset: staging               ← dbt (cleaned, typed, documented)          │
-│  Dataset: intermediate          ← dbt (business logic joins)                │
-│  Dataset: marts                 ← dbt (analytics-ready aggregations)        │
-│           ├── customer/                                                     │
-│           ├── risk/                                                         │
-│           └── finance/                                                      │
-│                                                                             │
-└───────────────────────────────────┬─────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    BI & ANALYTICS (Looker / LookML)                         │
-│                                                                             │
-│  • Customer 360 Dashboard                                                   │
-│  • Fraud & Risk Analytics                                                   │
-│  • Transaction Volume & Revenue                                             │
-│  • Loan Portfolio Performance                                               │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│              🔮 FUTURE: CDC Real-Time Streaming (Phase 2)                  │
-│                                                                             │
-│  PostgreSQL (WAL) ──► Debezium ──► Kafka ──► ClickHouse ──► Grafana         │
-│  MySQL (binlog)   ──►                                                       │
-│                                                                             │
-│  [Infrastructure pre-configured in this project — not yet activated]        │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          Data Sources                                        │
+│  PostgreSQL (ride_ops_pg)               MongoDB (ride_ops_mg)                │
+│  ├── drivers        ◄─── batch          ├── ride_events     ◄─── CDC         │
+│  ├── passengers     ◄─── batch          └── driver_location_stream ◄─ CDC    │
+│  ├── vehicle_types  ◄─── batch                                               │
+│  ├── zones          ◄─── batch                                               │
+│  └── rides          ◄─── CDC                                                 │
+└───────────┬────────────────────────────────────┬─────────────────────────────┘
+            │ batch (daily)                      │ CDC (real-time)
+            ▼                                    ▼
+  ┌──────────────────┐              ┌────────────────────────┐
+  │  Trino           │              │  Debezium → Kafka      │
+  │  (PG → BQ CTAS)  │              │  (KRaft + Schema Reg.) │
+  └────────┬─────────┘              │  → Kafka Connect       │
+           │                        │  → GCS Sink (Parquet)  │
+           │                        └────────────┬───────────┘
+           │                                     │
+           │           ┌─────────────────────────┘
+           │           │
+    ┌──────▼───────┐  ┌▼─────────────────┐    ┌──────────────────┐
+    │ Airflow DAG  │  │  Airflow DAG     │    │  Airflow DAG     │
+    │ Postgres →   │  │  GCS → BQ        │    │  dbt Pipeline    │
+    │ BQ via Trino │  │  (hourly CDC)    │    │                  │
+    └──────┬───────┘  └────────┬─────────┘    └────────┬─────────┘
+           │                   │                        │
+           └───────────────────▼────────────────────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │     BigQuery        │
+                    │  ┌───────────────┐  │
+                    │  │    Bronze     │  │  Raw / source views
+                    │  ├───────────────┤  │
+                    │  │    Silver     │  │  Dims + Facts (star schema)
+                    │  ├───────────────┤  │
+                    │  │     Gold      │  │  Analytics marts
+                    │  └───────────────┘  │
+                    └─────────────────────┘
 ```
 
 ---
@@ -94,501 +54,340 @@
 ## 🗂️ Project Structure
 
 ```
-banking-data-platform/
-│
-├── README.md                          # This file
-├── SETUP_GCP.md                       # Step-by-step GCP setup guide
-├── docker-compose.yml                 # All local services
-├── docker-compose.override.yml        # Dev-only overrides
-├── .env.example                       # Environment variables template
-├── .gitignore
-├── Makefile                           # Common dev commands
-│
-├── docs/
-│   ├── architecture.md                # Detailed architecture decisions
-│   ├── data-dictionary.md             # All table definitions
-│   └── cdc-roadmap.md                 # Phase 2 CDC planning
-│
-├── data-generator/                    # Synthetic banking data generator
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── main.py                        # Entry point: --mode full/incremental/truncate
-│   ├── config/
-│   │   └── settings.py                # Env var config + date range settings
-│   ├── generators/
-│   │   ├── db_connections.py          # Postgres & MySQL connection helpers
-│   │   ├── core_banking/              # PostgreSQL generators
-│   │   │   ├── customers.py           # Indonesian customer profiles (KYC, NIK)
-│   │   │   ├── accounts.py            # Savings, checking, loan, credit card accounts
-│   │   │   ├── branches.py            # Bank branch master data
-│   │   │   ├── employees.py           # Employee profiles per branch
-│   │   │   └── loan_applications.py   # Loan lifecycle (submitted → disbursed)
-│   │   └── transaction/               # MySQL generators
-│   │       ├── transactions.py        # IDR transactions with realistic patterns
-│   │       ├── merchants.py           # Merchant profiles with MCC codes
-│   │       └── fraud_flags.py         # Fraud detection flags (0.8% rate)
-│   └── schemas/
-│       ├── postgres_schema.sql        # DDL with WAL config + WIB timestamps
-│       └── mysql_schema.sql           # DDL with binlog config + WIB timestamps
-│
-├── ingestion/
-│   ├── trino/
-│   │   ├── config/config.properties
-│   │   └── catalogs/
-│   │       ├── postgresql.properties
-│   │       ├── mysql.properties
-│   │       └── bigquery.properties
-│   └── scripts/
-│       ├── extract_postgres.py        # Incremental extract via Trino
-│       └── extract_mysql.py           # Incremental extract via Trino
-│
-├── orchestration/
-│   └── airflow/
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       ├── dags/
-│       │   ├── dag_core_banking.py
-│       │   ├── dag_transactions.py
-│       │   └── dbt_transformation_dag.py
-│       └── plugins/
-│
-├── transformation/
-│   └── dbt/
-│       ├── dbt_project.yml
-│       ├── profiles.yml
-│       ├── packages.yml
-│       ├── models/
-│       │   ├── staging/
-│       │   │   ├── _sources.yml
-│       │   │   ├── core_banking/      # stg_customers, stg_accounts, ...
-│       │   │   └── transactions/      # stg_transactions, stg_merchants, ...
-│       │   ├── intermediate/          # Business logic joins
-│       │   └── marts/
-│       │       ├── customer/          # mart_customer_360, mart_clv
-│       │       ├── risk/              # mart_fraud_analytics, mart_credit_risk
-│       │       └── finance/           # mart_transaction_analytics
-│       ├── tests/
-│       ├── macros/
-│       │   ├── generate_schema_name.sql
-│       │   ├── audit_columns.sql
-│       │   └── banking_utils.sql
-│       └── snapshots/                 # SCD Type 2 for customers & accounts
-│
-├── monitoring/
-│   ├── great_expectations/            # Data quality suite
-│   └── alerts/alert_config.yml        # Alerting rules
-│
-└── scripts/
-    ├── setup.sh                       # Local dev bootstrap
-    ├── setup_gcp.sh                   # GCP project bootstrap
-    └── init_cdc.sh                    # CDC pre-configuration validator
+dummy-taxi-pipeline/
+├── config/                        # Airflow configuration (airflow.cfg)
+├── connectors/                    # Kafka Connect connector configs
+│   ├── debezium-mongodb-source.json
+│   ├── debezium-postgres.json
+│   ├── gcs-sink.json
+│   └── minio-sink.json            # Alternative: MinIO instead of GCS
+├── credentials/
+│   └── service-account.json       # GCP service account (not committed)
+├── dags/
+│   ├── helpers/                   # Reusable Trino & BQ task-group utilities
+│   ├── gcs_to_bigquery_cdc.py     # Hourly CDC loader: GCS → BigQuery
+│   ├── postgres_to_bq_trino_multi_table_V3_with_label.py  # Batch ingest
+│   ├── dbt_pipeline.py            # dbt run orchestration
+│   └── sql/merge_data.sql
+├── data-generator/
+│   ├── generator/
+│   │   ├── generator_v3.py        # Simulation engine (Python + Faker)
+│   │   ├── Dockerfile
+│   │   └── requirements-generator.txt
+│   ├── mongodb/init_mongodb.js    # MongoDB replica set & schema init
+│   └── postgres/init_postgres.sql # PostgreSQL schema & seed data
+├── dbt/
+│   ├── dbt_project/               # dbt project: ride_hailing
+│   │   ├── models/
+│   │   │   ├── bronze/            # Source views
+│   │   │   ├── silver/
+│   │   │   │   ├── dimensions/    # dim_drivers, dim_passengers, dim_zones…
+│   │   │   │   └── facts/         # fct_rides, fct_ride_events
+│   │   │   └── gold/
+│   │   │       ├── mart_driver/
+│   │   │       ├── mart_finance/
+│   │   │       └── mart_operations/
+│   │   ├── snapshots/             # SCD Type 2 for drivers & passengers
+│   │   ├── macros/
+│   │   └── tests/
+│   └── docker/Dockerfile
+├── kafka-connect/Dockerfile       # Custom Kafka Connect image with plugins
+├── trino/
+│   ├── catalog/                   # bigquery, postgresql, mysql, mongodb
+│   └── etc/                       # Trino config & JVM settings
+├── docker-compose-celery.yaml     # Main stack: Airflow + Trino + databases
+├── docker-compose-cdc.yaml        # CDC stack: Kafka + Debezium + connectors
+├── docker-compose-generator.yaml  # Data generator service
+├── Dockerfile                     # Custom Airflow image
+├── requirements.txt               # Airflow provider dependencies
+└── .env                           # Environment variables (see setup)
 ```
 
 ---
 
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Data Generation | Python · Faker (`id_ID`) · psycopg2 · pymongo |
+| Operational DB | PostgreSQL 14 · MongoDB (replica set) · MySQL 8 |
+| CDC / Streaming | Apache Kafka (KRaft, Confluent 7.6) · Debezium · Schema Registry (Avro) |
+| Object Storage | Google Cloud Storage (or MinIO for local) |
+| Orchestration | Apache Airflow 3.x · CeleryExecutor · Redis |
+| Query Federation | Trino (catalogs: PostgreSQL · BigQuery · MySQL · MongoDB) |
+| Data Warehouse | Google BigQuery |
+| Transformation | dbt (BigQuery adapter) |
+| Containerisation | Docker · Docker Compose |
 
 ---
 
-## 🧪 Data Generator
+## ⚙️ Prerequisites
 
-Synthetic data generator yang menghasilkan data perbankan Indonesia realistis untuk mengisi PostgreSQL (Core Banking) dan MySQL (Transaction System) sebagai source data pipeline.
+- Docker & Docker Compose v2
+- GCP project with BigQuery and GCS enabled
+- A GCP service account JSON key with roles:
+  - `BigQuery Data Editor`
+  - `BigQuery Job User`
+  - `Storage Object Admin`
+- Python 3.10+ (for local dbt runs, optional)
 
-### Fitur Utama
+---
 
-- **Timezone WIB** — Semua timestamp (`created_at`, `updated_at`, `transaction_at`, dll.) menggunakan Asia/Jakarta (UTC+7), bukan UTC
-- **Controlled date range** — Full load dan incremental load menggunakan rentang tanggal yang dapat dikonfigurasi, bukan `NOW()` real-time
-- **Dua mode operasi** — `full` untuk initial load historis, `incremental` untuk simulasi daily load
-- **Data Indonesia realistis** — NIK 16 digit, nama WNI, provinsi, kota, mata uang IDR, pola transaksi QRIS/mobile banking
-- **Deterministik** — `SEED=42` menghasilkan data yang sama setiap kali dijalankan (reproducible)
-- **Fraud rate realistis** — 0.8% transaksi di-flag sebagai fraud, sesuai industri perbankan
+## 🚀 Quick Start
 
-### Date Range Design
-
-```
-FULL LOAD
-─────────────────────────────────────────────────────────────────
-  2025-01-01                                          2025-12-31
-      │◄──────────── data tersebar merata ──────────────────►│
-      │                                                       │
-      │  transactions      → spread across full year          │
-      │  customers         → onboarded throughout 2025        │
-      │  accounts          → opened throughout 2025           │
-      │  loan_applications → submitted throughout 2025        │
-      │                                                       │
-      │  branches    → pre-2025 (bank sudah lama berdiri)     │
-      │  employees   → pre-2025 (hire date bisa lebih lama)   │
-      │  merchants   → pre-2025 (merchant sudah existing)     │
-
-INCREMENTAL LOAD (daily, mulai 2026-01-02)
-─────────────────────────────────────────────────────────────────
-  2026-01-02   2026-01-03   2026-01-04   ...
-      │             │             │
-   1 hari       1 hari        1 hari     ← tiap run = 1 hari data baru
-   ~333 txn    ~333 txn     ~333 txn     ← (num_transactions / 30)
-```
-
-### Modes
-
-| Mode | Deskripsi | Kapan Digunakan |
-|------|-----------|-----------------|
-| `full` | Generate semua tabel dari nol, data tersebar di `FULL_RANGE_START` s/d `FULL_START_DATE` | Initial setup, reset environment |
-| `incremental` | Tambah data baru untuk 1 hari (customers baru, transaksi harian, loan baru) | Daily pipeline testing, Airflow DAG |
-| `truncate` | Hapus semua generated data *(belum diimplementasi)* | Reset data |
-
-### Cara Menjalankan
-
-#### Via Docker (recommended)
+### 1. Clone & configure environment
 
 ```bash
-# Full load — default range 2025-01-01 s/d 2025-12-31
-docker compose run --rm data-generator python main.py --mode full
+git clone https://github.com/<your-org>/dummy-taxi-pipeline.git
+cd dummy-taxi-pipeline
 
-# Full load dengan range custom
-docker compose run --rm data-generator \
-  python main.py --mode full \
-  --range-start 2025-01-01 \
-  --start-date 2025-12-31
-
-# Incremental load di tanggal custom (tidak perlu tunggu hari berikutnya)
-docker compose run --rm data-generator \
-  python main.py --mode incremental \
-  --incremental-date 2026-01-02
-```
-
-#### Via Environment Variables (untuk Airflow DAG)
-
-```bash
-# Set via env var, cocok untuk DockerOperator di Airflow
-FULL_RANGE_START=2025-01-01 \
-FULL_START_DATE=2025-12-31 \
-python main.py --mode full
-
-# Incremental dengan tanggal dari Airflow execution_date
-INCREMENTAL_DATE={{ ds }} python main.py --mode incremental
-```
-
-#### Contoh Airflow DockerOperator
-
-```python
-from airflow.providers.docker.operators.docker import DockerOperator
-
-incremental_load = DockerOperator(
-    task_id="incremental_data_load",
-    image="banking-data-generator:latest",
-    command="python main.py --mode incremental --incremental-date {{ ds }}",
-    environment={
-        "POSTGRES_HOST": "postgres-core",
-        "MYSQL_HOST": "mysql-txn",
-        # ... credentials dari Airflow connections
-    },
-    network_mode="banking-net",
-)
-```
-
-### Environment Variables
-
-| Variable | Default | Deskripsi |
-|----------|---------|-----------|
-| `POSTGRES_HOST` | `localhost` | PostgreSQL host |
-| `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `POSTGRES_DB` | `core_banking` | Database name |
-| `POSTGRES_USER` | `banking_core` | Username |
-| `POSTGRES_PASSWORD` | *(required)* | Password |
-| `MYSQL_HOST` | `localhost` | MySQL host |
-| `MYSQL_PORT` | `3306` | MySQL port |
-| `MYSQL_DB` | `transaction_db` | Database name |
-| `MYSQL_USER` | `banking_txn` | Username |
-| `MYSQL_PASSWORD` | *(required)* | Password |
-| `NUM_CUSTOMERS` | `10000` | Jumlah customer yang di-generate |
-| `NUM_TRANSACTIONS` | `100000` | Jumlah transaksi untuk full load |
-| `NUM_MERCHANTS` | `500` | Jumlah merchant |
-| `NUM_BRANCHES` | `50` | Jumlah cabang |
-| `NUM_EMPLOYEES` | `200` | Jumlah karyawan |
-| `SEED` | `42` | Random seed (reproducibility) |
-| `BATCH_SIZE` | `500` | Ukuran batch insert |
-| `FULL_RANGE_START` | `2025-01-01` | Tanggal **awal** range full load |
-| `FULL_START_DATE` | `2025-12-31` | Tanggal **akhir** range full load |
-| `INCREMENTAL_DATE` | `2026-01-02` | Tanggal simulasi incremental load |
-| `TZ` | `Asia/Jakarta` | Timezone container (set di docker-compose) |
-
-### Data yang Dihasilkan
-
-#### PostgreSQL — Core Banking (`core_banking`)
-
-| Tabel | Volume (default) | Deskripsi |
-|-------|-----------------|-----------|
-| `branches` | 50 rows | Cabang bank di kota-kota Indonesia |
-| `employees` | 200 rows | Karyawan per cabang (teller, CS, RM, dll.) |
-| `product_types` | 7 rows | Produk perbankan (tabungan, giro, KPR, KTA, CC) |
-| `customers` | 10.000 rows | Profil nasabah dengan NIK, KYC status, segmen |
-| `accounts` | ~15.000 rows | Rekening nasabah (1–3 akun per nasabah) |
-| `loan_applications` | ~2.000 rows | Aplikasi pinjaman dengan lifecycle lengkap |
-
-#### MySQL — Transaction System (`transaction_db`)
-
-| Tabel | Volume (default) | Deskripsi |
-|-------|-----------------|-----------|
-| `transaction_types` | 8 types | DEBIT_PURCHASE, ATM_WITHDRAWAL, QRIS_PAYMENT, dll. |
-| `payment_methods` | 6 methods | MOBILE_BANKING, DEBIT_CARD, QRIS, dll. |
-| `merchant_categories` | 15 MCC | ISO 18245 Merchant Category Codes |
-| `merchants` | 500 rows | Merchant dengan MCC, kota, risk level |
-| `transactions` | 100.000 rows | Transaksi IDR dengan channel, status, fee |
-| `fraud_flags` | ~800 rows | Fraud flags (0.8% rate, 4 severity levels) |
-
-### Distribusi Data Realistis
-
-**Transaction channels:**
-```
-mobile banking  40%  │████████████████████
-ATM             20%  │██████████
-web banking     15%  │████████
-POS             15%  │████████
-QRIS             5%  │███
-branch           5%  │███
-```
-
-**Transaction types (IDR):**
-```
-DEBIT_PURCHASE    30%  │  Rp 10.000 – Rp 5.000.000
-CREDIT_PURCHASE   10%  │  Rp 50.000 – Rp 25.000.000
-ATM_WITHDRAWAL    15%  │  Rp 100.000 – Rp 3.000.000
-TRANSFER_OUT      15%  │  Rp 50.000 – Rp 50.000.000
-TRANSFER_IN       12%  │  Rp 50.000 – Rp 50.000.000
-SALARY_CREDIT      5%  │  Rp 3.000.000 – Rp 50.000.000
-BILL_PAYMENT       8%  │  Rp 50.000 – Rp 5.000.000
-QRIS_PAYMENT       5%  │  Rp 5.000 – Rp 500.000
-```
-
-**Transaction status:**
-```
-completed  95%  │  fraud_flags rate: 0.8% dari completed
-failed      3%  │  severity: low 40% / medium 35% / high 18% / critical 7%
-pending     1%
-reversed    1%
-```
-
-**Customer segments:**
-```
-retail     70%  │  KYC: verified 85% / pending 8% / rejected 4% / expired 3%
-priority   15%
-premier     8%
-sme         4%
-private     2%
-corporate   1%
-```
-
-### Timestamp Design
-
-Semua timestamp disimpan dalam **WIB (Asia/Jakarta, UTC+7)**. Generator mengirim nilai `created_at` dan `updated_at` secara eksplisit ke database — tidak mengandalkan `DEFAULT NOW()` — sehingga data historis ter-backfill dengan benar sesuai `range_start` s/d `range_end`.
-
-```
-PostgreSQL → TIMESTAMPTZ  → stored as UTC, displayed as WIB (+07)
-MySQL      → DATETIME(6)  → stored as WIB naive string (no tz offset)
-```
-
-## ⚡ Quick Start (Local Development)
-
-### Prerequisites
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Docker | ≥ 24.0 | Container runtime |
-| Docker Compose | ≥ 2.20 | Service orchestration |
-| Python | ≥ 3.11 | Scripts & generators |
-| `gcloud` CLI | latest | GCP interaction |
-| `dbt-bigquery` | ≥ 1.7 | Transformations |
-| Make | any | Dev shortcuts |
-
-### 1. Clone & Configure
-
-```bash
-git clone https://github.com/yourname/banking-data-platform.git
-cd banking-data-platform
-
-# Copy and edit environment variables
 cp .env.example .env
-# Edit .env with your actual values (GCP project ID, credentials, etc.)
+# Edit .env — fill in GCP_PROJECT_ID, GCS_BUCKET, Fernet/secret keys, etc.
 ```
 
-### 2. Bootstrap Local Services
+Place your GCP service account key at:
+
+```
+credentials/service-account.json
+```
+
+Generate required Airflow secrets if you haven't already:
 
 ```bash
-# Start all local services (Postgres, MySQL, Trino, Airflow)
-make up
+# Fernet key
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
-# Verify all services are healthy
-make health
-
-# Generate synthetic banking data
-make generate-data
-
-# Verify data was loaded
-make verify-data
+# Secret key
+python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### 3. Run Ingestion Pipeline
+### 2. Start the main stack (Airflow + Trino + databases)
 
 ```bash
-# Trigger ingestion DAGs via Airflow UI
-open http://localhost:8080   # admin / admin
-
-# Or trigger manually via CLI
-make trigger-ingest
+docker compose -f docker-compose-celery.yaml up -d
 ```
 
-### 4. Run dbt Transformations
+Wait for all services to be healthy, then open the Airflow UI at `http://localhost:8080`.
+
+### 3. Start the CDC stack (Kafka + Debezium + Kafka Connect)
 
 ```bash
-cd transformation/dbt
-
-# Install dependencies
-dbt deps
-
-# Run staging + intermediate + marts
-dbt run --profiles-dir . --target dev
-
-# Run data quality tests
-dbt test --profiles-dir . --target dev
-
-# Generate documentation
-dbt docs generate && dbt docs serve
+docker compose -f docker-compose-cdc.yaml up -d
 ```
 
----
-
-## 🏛️ Data Models
-
-### Source: Core Banking (PostgreSQL)
-
-```sql
--- Key tables
-customers          → 500K rows  (PII encrypted at rest)
-accounts           → 1.2M rows  (savings, checking, loans, credit)
-branches           → 150 rows
-employees          → 2K rows
-loan_applications  → 200K rows
-credit_scores      → 500K rows
-```
-
-### Source: Transaction System (MySQL)
-
-```sql
-transactions       → 10M+ rows (incremental daily load)
-merchants          → 50K rows
-fraud_flags        → 100K rows
-payment_methods    → 8 types
-transaction_types  → 15 types
-```
-
-### BigQuery Marts
-
-| Mart | Description | Refresh |
-|------|-------------|---------|
-| `mart_customer_360` | Unified customer profile with all products | Daily |
-| `mart_customer_lifetime_value` | CLV segmentation & scoring | Weekly |
-| `mart_transaction_analytics` | Daily transaction volume, revenue | Daily |
-| `mart_fraud_analytics` | Fraud patterns, risk scoring | Daily |
-| `mart_credit_risk` | Loan performance, NPL ratios | Daily |
-| `mart_product_performance` | Product adoption, cross-sell metrics | Weekly |
-
----
-
-## 🔒 Banking-Grade Best Practices
-
-### Security
-- **PII Masking**: Customer PII (name, NIK, phone) masked in `staging` layer using BigQuery column-level security
-- **Encryption**: All GCS buckets use CMEK (Customer-Managed Encryption Keys)
-- **IAM**: Least-privilege service accounts per component
-- **Secret Management**: All credentials via GCP Secret Manager (never in `.env` in production)
-- **Network**: VPC-native setup, Private Google Access enabled
-- **Audit Log**: BigQuery Data Access audit logs enabled
-
-### Data Quality
-- **Source freshness** checks in dbt (`source freshness`)
-- **Not-null, unique, accepted-values** tests on all primary & foreign keys
-- **Great Expectations** suites for raw data validation before ingestion
-- **Referential integrity** tests across source joins
-
-### Reliability
-- **Idempotent** DAGs: safe to re-run without duplicating data
-- **Incremental loads** with `updated_at` watermark tracking
-- **Dead-letter queue**: Failed records written to `raw_errors` dataset
-- **Alerting**: Airflow email + Slack alerts on SLA miss
-
-### Observability
-- **dbt artifacts** (manifest, run_results) stored to GCS for lineage
-- **Airflow metrics** via StatsD → Prometheus → Grafana (optional)
-- **BigQuery slot usage** dashboards in Looker
-
-### Compliance (Banking)
-- **Data lineage** tracked end-to-end via dbt lineage graph
-- **Row-level security** in BigQuery for multi-branch access
-- **Data retention** policies on raw datasets (90 days)
-- **GDPR/right-to-be-forgotten** workflow via dbt macro
-
----
-
-## 🔮 Phase 2: CDC Real-Time Streaming (Roadmap)
-
-The infrastructure is **pre-configured** for CDC but not yet active:
-
-```
-PostgreSQL  ──► (WAL logical replication configured)
-MySQL       ──► (binlog ROW format configured)
-                        │
-                        ▼
-                   Debezium (Kafka Connect)
-                        │
-                        ▼
-                   Apache Kafka
-                        │
-                        ▼
-                   ClickHouse (OLAP)
-                        │
-                        ▼
-                   Grafana (Real-time dashboards)
-```
-
-**What's already done for CDC readiness:**
-- PostgreSQL: `wal_level=logical`, `max_replication_slots=5`, `max_wal_senders=5`
-- MySQL: `binlog_format=ROW`, `binlog_row_image=FULL`, `expire_logs_days=7`
-- Tables have `created_at`, `updated_at`, and `deleted_at` (soft-delete) columns
-- Primary keys defined on all tables
-- `scripts/init_cdc.sh` validates CDC readiness
-
----
-
-## 🌐 GCP Services Used
-
-| Service | Purpose |
-|---------|---------|
-| BigQuery | Data warehouse, SQL transformations |
-| Cloud Storage (GCS) | Raw data lake landing zone |
-| Cloud Composer (optional) | Managed Airflow |
-| Artifact Registry | Docker image storage |
-| Secret Manager | Credentials management |
-| Cloud Run / GCE | Airflow worker (self-managed) |
-| IAM & VPC | Security & networking |
-
-> **Full GCP setup guide → [`SETUP_GCP.md`](./SETUP_GCP.md)**
-
----
-
-## 🛠️ Make Commands Reference
+Once Kafka Connect is ready, register the connectors:
 
 ```bash
-make up              # Start all Docker services
-make down            # Stop all services
-make health          # Check service health
-make generate-data   # Run data generator (Postgres + MySQL)
-make verify-data     # Count rows in source tables
-make trigger-ingest  # Trigger Airflow ingestion DAGs
-make dbt-run         # Run all dbt models
-make dbt-test        # Run all dbt tests
-make dbt-docs        # Generate & serve dbt docs
-make lint            # Run SQLFluff linter on dbt models
-make clean           # Remove volumes and containers
-make logs            # Tail logs for all services
+# PostgreSQL CDC source
+curl -X POST http://localhost:8083/connectors \
+  -H "Content-Type: application/json" \
+  -d @connectors/debezium-postgres.json
+
+# MongoDB CDC source
+curl -X POST http://localhost:8083/connectors \
+  -H "Content-Type: application/json" \
+  -d @connectors/debezium-mongodb-source.json
+
+# GCS sink (writes Parquet, partitioned hourly)
+curl -X POST http://localhost:8083/connectors \
+  -H "Content-Type: application/json" \
+  -d @connectors/gcs-sink.json
+```
+
+### 4. Start the data generator
+
+```bash
+docker compose -f docker-compose-generator.yaml up -d
+```
+
+The generator seeds the databases with **150 drivers** and **600 passengers**, then continuously simulates ride activity at **60× real-time speed** (configurable via `SIM_SPEED`).
+
+### 5. Trigger the Airflow DAGs
+
+| DAG | Schedule | Description |
+|---|---|---|
+| `postgres_to_bq_trino_multi_table_V3_with_label` | `@daily` | Batch ingest `drivers`, `passengers`, `vehicle_types`, `zones` → BigQuery Bronze via Trino |
+| `gcs_to_bigquery_cdc_hourly` | `0 * * * *` | Load hourly CDC Parquet files from GCS → BigQuery `raw_cdc` |
+| `dbt_pipeline` | After ingest | Run dbt models: Bronze → Silver → Gold |
+
+---
+
+## 📊 Data Model (dbt)
+
+The dbt project (`ride_hailing`) follows a **Medallion architecture** targeting BigQuery.
+
+### Bronze
+Raw source views over BigQuery tables loaded from CDC and batch ingest. No transformation applied.
+
+### Silver — Star Schema
+
+**Dimensions**
+
+| Model | Description |
+|---|---|
+| `dim_drivers` | Driver profiles with vehicle and rating data |
+| `dim_passengers` | Passenger profiles |
+| `dim_zones` | Geographic zones (Jakarta areas) |
+| `dim_vehicle_types` | Vehicle categories and base fares |
+| `dim_date` | Date spine |
+
+**Facts**
+
+| Model | Materialization | Description |
+|---|---|---|
+| `fct_rides` | Incremental (merge) | Completed ride transactions with fare breakdown |
+| `fct_ride_events` | Incremental (merge) | Per-ride status events (REQUESTED → ACCEPTED → PICKED_UP → COMPLETED) |
+
+**Snapshots (SCD Type 2)**
+- `snapshot_dim_driver`
+- `snapshot_dim_passengers`
+- `snapshot_dim_vehicle_types`
+- `snapshot_dim_zones`
+
+### Gold — Analytics Marts
+
+| Mart | Models |
+|---|---|
+| `mart_operations` | `mart_daily_ride_summary`, `mart_cancellation_analysis`, `mart_zone_heatmap` |
+| `mart_finance` | `mart_revenue_daily`, `mart_surge_analysis` |
+| `mart_driver` | `mart_driver_performance`, `mart_driver_daily_activity` |
+
+---
+
+## 🔄 CDC Pipeline Detail
+
+```
+PostgreSQL (rides) / MongoDB (ride_events, driver_location_stream)
+       │  (WAL / oplog)
+       ▼
+  Debezium Source Connector
+  (Avro + Schema Registry)
+       │
+       ▼
+  Kafka Topics  (prefix: cdc.)
+  e.g. cdc.public.rides
+       │
+       ▼
+  Kafka Connect GCS Sink
+  Format : Parquet (Snappy)
+  Path   : raw/cdc/topic=<topic>/year=YYYY/month=MM/day=dd/hour=HH/
+       │
+       ▼
+  Airflow DAG: gcs_to_bigquery_cdc_hourly
+  → BigQuery dataset: raw_cdc
+```
+
+Topics captured:
+
+| Source | Topics | Ingestion |
+|---|---|---|
+| PostgreSQL | `cdc.public.rides` | CDC → GCS → BQ |
+| MongoDB | `cdc.ride_ops_mg.ride_events`, `cdc.ride_ops_mg.driver_location_stream` | CDC → GCS → BQ |
+| PostgreSQL | `drivers`, `passengers`, `vehicle_types`, `zones` | Batch (Trino) |
+
+---
+
+## 🧩 Trino Federation
+
+Trino acts as a unified query layer across all data sources. The batch ingest DAG uses Trino to `INSERT INTO` BigQuery directly from PostgreSQL — no intermediate staging files needed.
+
+Configured catalogs:
+
+| Catalog | Backend |
+|---|---|
+| `postgresql` | PostgreSQL 14 (ride_ops_pg) |
+| `bigquery` | Google BigQuery |
+| `mysql` | MySQL 8 (ride_marketing_mysql) |
+| `mongodb` | MongoDB |
+
+---
+
+## 🌱 Data Generator
+
+The generator (`data-generator/generator/generator_v3.py`) simulates a realistic Indonesian ride-hailing operation:
+
+- **Locale**: `id_ID` (Indonesian names, addresses in Jakarta zones: JKT-SEL, JKT-PUS, etc.)
+- **Simulation clock**: configurable start date and speed multiplier (`SIM_SPEED=60` → 1 real second = 1 simulated minute)
+- **Ride lifecycle**: `REQUESTED → ACCEPTED → PICKED_UP → COMPLETED / CANCELLED / NO_DRIVER`
+- **Driver locations**: streamed to MongoDB at configurable intervals (default 2/min)
+- **Recovery**: on restart, looks back `RECOVERY_LOOKBACK_DAYS` to resume open rides
+
+Key environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SIM_SPEED` | `60` | Simulation speed multiplier |
+| `INITIAL_DRIVERS` | `150` | Number of drivers to seed |
+| `INITIAL_PASSENGERS` | `600` | Number of passengers to seed |
+| `RIDES_PER_TICK_WEEKDAY_BASE` | `2` | New rides per tick on weekdays |
+| `RIDES_PER_TICK_WEEKEND_BASE` | `3` | New rides per tick on weekends |
+| `MAX_OPEN_RIDES` | `400` | Max concurrent open rides |
+| `SIM_START_AT` | `2026-01-01T00:00:00+07:00` | Simulated start timestamp |
+
+---
+
+## 🔐 Environment Variables
+
+Copy `.env` and fill in all values before running. Key variables:
+
+```dotenv
+# PostgreSQL
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=ride_ops_pg
+
+# GCP
+GCP_PROJECT_ID=your-gcp-project
+GCS_BUCKET=your-gcs-bucket
+BQ_LOCATION=us
+BQ_DATASET_BRONZE=bronze_taxi
+BQ_DATASET_SILVER=silver_taxi
+BQ_DATASET_GOLD=gold_taxi
+
+# Airflow
+AIRFLOW__CORE__FERNET_KEY=<generated>
+AIRFLOW__CORE__SECRET_KEY=<generated>
+AIRFLOW_UID=50000
+
+# dbt
+DBT_TARGET=prod
+```
+
+> ⚠️ **Never commit `.env` or `credentials/service-account.json` to version control.**
+
+---
+
+## 🧪 dbt Tests
+
+Custom data quality tests included:
+
+| Test | Description |
+|---|---|
+| `assert_fare_consistency` | Fare amount must be ≥ base fare for completed rides |
+| `assert_ride_timestamp_order` | `pickup_at` must be after `accepted_at` |
+| `assert_phone_canonical` | Phone numbers match canonical format |
+
+Run tests:
+
+```bash
+dbt test --profiles-dir ./dbt/dbt_profiles --project-dir ./dbt/dbt_project
 ```
 
 ---
+
+## 📦 Airflow Providers
+
+```
+apache-airflow-providers-postgres
+apache-airflow-providers-mysql
+apache-airflow-providers-google
+apache-airflow-providers-docker
+apache-airflow-providers-trino
+psycopg2-binary
+```
+
+---
+
+## 📝 License
+
+This project is for **educational and portfolio purposes**. Feel free to fork and adapt it.
