@@ -1,4 +1,4 @@
-# 🚕 Dummy Taxi Pipeline
+# 🚕 Taxi Ride Hailing
 
 A **end-to-end data engineering playground** that simulates a ride-hailing platform (à la Gojek/Grab) — from synthetic data generation all the way to analytics-ready Gold marts in BigQuery.
 
