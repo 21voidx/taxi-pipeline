@@ -199,7 +199,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/v1/info"]
+      test: ["CMD", "curl", "-f", "http://localhost:8082/v1/info"]
       interval: 15s
       timeout: 10s
       retries: 10
