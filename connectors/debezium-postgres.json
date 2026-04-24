@@ -32,7 +32,7 @@
     "transforms.unwrap.add.headers": "db",
     "snapshot.mode": "initial",
     "snapshot.isolation.mode": "repeatable_read",
-    "decimal.handling.mode": "double",
+    "decimal.handling.mode": "precise",
     "time.precision.mode": "connect",
     "heartbeat.interval.ms": "10000",
     "max.batch.size": "2048",
@@ -40,6 +40,6 @@
     "poll.interval.ms": "1000",
     "errors.log.enable": "true",
     "errors.log.include.messages": "true",
-    "errors.tolerance": "all"
+    "errors.tolerance": "none"
   }
 }

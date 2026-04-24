@@ -26,6 +26,6 @@
     "poll.interval.ms": "1000",
     "errors.log.enable": "true",
     "errors.log.include.messages": "true",
-    "errors.tolerance": "all"
+    "errors.tolerance": "none"
   }
 }
