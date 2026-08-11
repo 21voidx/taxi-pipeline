@@ -1,4 +1,0 @@
-psycopg2-binary==2.9.9
-Faker==37.1.0
-python-dateutil==2.9.0.post0
-pymongo==4.11.3
