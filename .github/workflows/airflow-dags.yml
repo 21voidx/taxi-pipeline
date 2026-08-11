@@ -37,6 +37,7 @@ jobs:
 
           docker pull "$IMAGE"
           docker run --rm -i \
+            -e PYTHONPATH=/opt/airflow/dags \
             -v "$PWD/airflow/dags:/opt/airflow/dags:ro" \
             "$IMAGE" python - <<'PY'
           from airflow.dag_processing.dagbag import DagBag
