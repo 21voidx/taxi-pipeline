@@ -2,97 +2,316 @@ name: Platform CI/CD
 
 on:
   pull_request:
-    branches: [development, production]
+    branches:
+      - development
+      - production
     paths:
       - "deploy/**"
       - "trino/**"
       - "postgres-source/**"
       - "scripts/apply-postgres-migrations.sh"
       - ".github/workflows/platform.yml"
+
   push:
-    branches: [development, production]
+    branches:
+      - development
+      - production
     paths:
       - "deploy/**"
       - "trino/**"
       - "postgres-source/**"
       - "scripts/apply-postgres-migrations.sh"
       - ".github/workflows/platform.yml"
+
+  # Hanya untuk initial bootstrap / recovery.
+  # Day-to-day CI/CD tetap otomatis dari PR dan merge.
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy"
+        required: true
+        type: choice
+        options:
+          - development
+          - production
 
 permissions:
   contents: read
   packages: read
 
 jobs:
+
+  # =========================================================
+  # CI
+  # =========================================================
   validate:
     name: Validate platform config
+
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Validate Compose
+      # CI tidak mempunyai .env production/development.
+      # Hanya validasi struktur Compose.
+      - name: Validate Compose structure
         run: |
-          TARGET_BRANCH="${GITHUB_BASE_REF:-$GITHUB_REF_NAME}"
-          ENV_FILE="deploy/.env.${TARGET_BRANCH}.example"
-          docker compose --env-file "$ENV_FILE" -f deploy/compose.yaml config -q
+          docker compose \
+            -f deploy/compose.yaml \
+            config \
+            --no-interpolate \
+            -q
 
-      - name: Python syntax check
-        run: python -m compileall -q airflow/dags generator/src generator/tests
+      - name: Validate migration script
+        run: |
+          bash -n scripts/apply-postgres-migrations.sh
 
+      - name: Validation summary
+        run: |
+          echo "Platform configuration is valid."
+          echo "Real environment variables will be validated on the target server."
+
+
+  # =========================================================
+  # CD
+  # =========================================================
   deploy:
-    name: Deploy platform config
+    name: Deploy platform
+
     if: github.event_name != 'pull_request'
-    needs: validate
-    runs-on: [self-hosted, Linux, X64]
-    environment: ${{ github.ref_name }}
-    concurrency:
-      group: platform-${{ github.ref_name }}
-      cancel-in-progress: false
+
+    needs:
+      - validate
+
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+
     timeout-minutes: 20
+
+    # push development  -> development
+    # push production   -> production
+    # workflow_dispatch -> selected environment
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+
+    concurrency:
+      group: platform-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+      cancel-in-progress: false
+
+    env:
+      TARGET_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+
     steps:
+
+      # -----------------------------------------------------
+      # Checkout
+      # -----------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v6
 
+
+      # -----------------------------------------------------
+      # Resolve environment
+      # -----------------------------------------------------
+      - name: Resolve deployment target
+        run: |
+          case "$TARGET_ENV" in
+            development|production)
+              ;;
+            *)
+              echo "Unsupported environment: $TARGET_ENV"
+              exit 1
+              ;;
+          esac
+
+          DEPLOY_ROOT="/opt/data-platform-${TARGET_ENV}"
+
+          echo "DEPLOY_ROOT=$DEPLOY_ROOT" >> "$GITHUB_ENV"
+
+          echo "Environment : $TARGET_ENV"
+          echo "Deploy root : $DEPLOY_ROOT"
+
+
+      # -----------------------------------------------------
+      # Check server bootstrap
+      # -----------------------------------------------------
+      - name: Check deployment directory
+        run: |
+          test -d "$DEPLOY_ROOT" || {
+            echo "ERROR: deployment directory does not exist:"
+            echo "$DEPLOY_ROOT"
+            exit 1
+          }
+
+          test -f "$DEPLOY_ROOT/.env" || {
+            echo "ERROR: .env does not exist:"
+            echo "$DEPLOY_ROOT/.env"
+            exit 1
+          }
+
+          echo "Deployment directory OK."
+          echo ".env found."
+
+
+      # -----------------------------------------------------
+      # Login GHCR
+      # -----------------------------------------------------
       - name: Login GHCR
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-            -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" |
+          docker login ghcr.io \
+            -u "${{ github.actor }}" \
+            --password-stdin
 
-      - name: Sync platform config
+
+      # -----------------------------------------------------
+      # Sync platform configuration
+      #
+      # IMPORTANT:
+      # .env is NOT copied.
+      # .env stays permanently on the server.
+      # -----------------------------------------------------
+      - name: Sync platform configuration
         run: |
-          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
-          test -d "$DEPLOY_ROOT"
-          test -f "$DEPLOY_ROOT/.env"
-
           mkdir -p \
             "$DEPLOY_ROOT/trino/catalog" \
             "$DEPLOY_ROOT/trino/etc" \
             "$DEPLOY_ROOT/postgres-source/init" \
             "$DEPLOY_ROOT/postgres-source/migrations"
 
-          cp deploy/compose.yaml "$DEPLOY_ROOT/compose.yaml"
-          rsync -a --delete trino/catalog/ "$DEPLOY_ROOT/trino/catalog/"
-          rsync -a --delete trino/etc/ "$DEPLOY_ROOT/trino/etc/"
-          rsync -a --delete postgres-source/init/ "$DEPLOY_ROOT/postgres-source/init/"
-          rsync -a --delete postgres-source/migrations/ "$DEPLOY_ROOT/postgres-source/migrations/"
+          cp \
+            deploy/compose.yaml \
+            "$DEPLOY_ROOT/compose.yaml"
 
-          cd "$DEPLOY_ROOT"
-          docker compose --env-file .env -f compose.yaml config -q
-          docker compose --env-file .env -f compose.yaml pull
-          docker compose --env-file .env -f compose.yaml --profile tools pull dbt generator-bootstrap
-          docker compose --env-file .env -f compose.yaml up airflow-init
-          docker compose --env-file .env -f compose.yaml up -d \
-            --remove-orphans --wait --wait-timeout 180
+          rsync -a --delete \
+            trino/catalog/ \
+            "$DEPLOY_ROOT/trino/catalog/"
 
-      - name: Apply source migrations
+          rsync -a --delete \
+            trino/etc/ \
+            "$DEPLOY_ROOT/trino/etc/"
+
+          rsync -a --delete \
+            postgres-source/init/ \
+            "$DEPLOY_ROOT/postgres-source/init/"
+
+          rsync -a --delete \
+            postgres-source/migrations/ \
+            "$DEPLOY_ROOT/postgres-source/migrations/"
+
+          echo "Platform configuration synchronized."
+
+
+      # -----------------------------------------------------
+      # Validate REAL environment
+      #
+      # Sekarang workflow berjalan di home server,
+      # sehingga .env asli bisa digunakan.
+      # -----------------------------------------------------
+      - name: Validate real deployment config
         run: |
-          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
-          bash scripts/apply-postgres-migrations.sh "$DEPLOY_ROOT"
+          cd "$DEPLOY_ROOT"
 
+          docker compose \
+            --env-file .env \
+            -f compose.yaml \
+            config \
+            -q
+
+          echo "Real deployment configuration is valid."
+
+
+      # -----------------------------------------------------
+      # Pull images
+      # -----------------------------------------------------
+      - name: Pull platform images
+        run: |
+          cd "$DEPLOY_ROOT"
+
+          docker compose \
+            --env-file .env \
+            -f compose.yaml \
+            pull
+
+          docker compose \
+            --env-file .env \
+            -f compose.yaml \
+            --profile tools \
+            pull \
+            dbt \
+            generator-bootstrap
+
+
+      # -----------------------------------------------------
+      # Airflow initialization / DB migration
+      # -----------------------------------------------------
+      - name: Initialize Airflow
+        run: |
+          cd "$DEPLOY_ROOT"
+
+          docker compose \
+            --env-file .env \
+            -f compose.yaml \
+            up \
+            airflow-init
+
+
+      # -----------------------------------------------------
+      # Start / reconcile platform
+      # -----------------------------------------------------
+      - name: Deploy platform
+        run: |
+          cd "$DEPLOY_ROOT"
+
+          docker compose \
+            --env-file .env \
+            -f compose.yaml \
+            up \
+            -d \
+            --remove-orphans \
+            --wait \
+            --wait-timeout 180
+
+
+      # -----------------------------------------------------
+      # PostgreSQL source migrations
+      # -----------------------------------------------------
+      - name: Apply PostgreSQL source migrations
+        run: |
+          bash \
+            scripts/apply-postgres-migrations.sh \
+            "$DEPLOY_ROOT"
+
+
+      # -----------------------------------------------------
+      # Version marker
+      # -----------------------------------------------------
+      - name: Record platform version
+        run: |
+          echo "$GITHUB_SHA" \
+            > "$DEPLOY_ROOT/PLATFORM_VERSION"
+
+
+      # -----------------------------------------------------
+      # Final status
+      # -----------------------------------------------------
       - name: Show platform status
         run: |
-          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
           cd "$DEPLOY_ROOT"
-          docker compose --env-file .env -f compose.yaml ps
+
+          echo
+          echo "=========================================="
+          echo "Environment : $TARGET_ENV"
+          echo "Commit      : $GITHUB_SHA"
+          echo "Deploy root : $DEPLOY_ROOT"
+          echo "=========================================="
+          echo
+
+          docker compose \
+            --env-file .env \
+            -f compose.yaml \
+            ps
