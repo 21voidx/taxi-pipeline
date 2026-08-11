@@ -1,0 +1,204 @@
+version: 2
+
+models:
+  - name: int_rides_enriched
+    description: Business-ready ride grain combining lifecycle, location, customer, driver, payment, UTC timestamps, Asia/Jakarta fields, and role-playing dim_date keys.
+    columns:
+      - name: ride_id
+        data_tests: [not_null, unique]
+      - name: requested_date_key
+        data_tests: [not_null]
+      - name: requested_date
+        data_tests: [not_null]
+      - name: updated_at_utc
+        data_tests: [not_null]
+
+  - name: int_ride_funnel
+    description: One row per ride for each lifecycle step reached, grouped by requested date in Asia/Jakarta.
+    columns:
+      - name: ride_id
+        data_tests: [not_null]
+      - name: requested_date_key
+        data_tests: [not_null]
+      - name: step_number
+        data_tests: [not_null]
+
+  - name: dim_date
+    description: Conformed calendar dimension used as a role-playing dimension for requested, accepted, arrived, started, completed, cancelled, and paid dates.
+    columns:
+      - name: date_key
+        description: Integer date key in YYYYMMDD format.
+        data_tests: [not_null, unique]
+      - name: full_date
+        data_tests: [not_null, unique]
+      - name: day_name
+        data_tests: [not_null]
+      - name: is_weekend
+        data_tests: [not_null]
+      - name: year_number
+        data_tests: [not_null]
+
+  - name: dim_city
+    columns:
+      - name: city_key
+        data_tests: [not_null, unique]
+      - name: city_id
+        data_tests: [not_null, unique]
+
+  - name: dim_zone
+    columns:
+      - name: zone_key
+        data_tests: [not_null, unique]
+      - name: zone_id
+        data_tests: [not_null, unique]
+
+  - name: dim_customer
+    columns:
+      - name: customer_key
+        data_tests: [not_null, unique]
+      - name: customer_id
+        data_tests: [not_null, unique]
+
+  - name: dim_driver
+    columns:
+      - name: driver_key
+        data_tests: [not_null, unique]
+      - name: driver_id
+        data_tests: [not_null, unique]
+
+  - name: fct_rides
+    description: Incremental one-row-per-ride fact. Practical analytics keeps direct Asia/Jakarta dates and hours while also exposing role-playing dim_date keys.
+    columns:
+      - name: ride_id
+        data_tests: [not_null, unique]
+      - name: requested_at_utc
+        data_tests: [not_null]
+      - name: requested_at_jakarta
+        data_tests: [not_null]
+      - name: requested_date
+        data_tests: [not_null]
+      - name: requested_hour
+        data_tests: [not_null]
+      - name: requested_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: accepted_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: driver_arrived_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: started_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: completed_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: cancelled_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: paid_date_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: customer_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_customer')
+                field: customer_key
+      - name: city_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_city')
+                field: city_key
+      - name: pickup_zone_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_zone')
+                field: zone_key
+      - name: dropoff_zone_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_zone')
+                field: zone_key
+
+  - name: agg_daily_city_service
+    description: Executive daily KPI mart by Asia/Jakarta business date, city, and service.
+    columns:
+      - name: metric_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: metric_date
+        data_tests: [not_null]
+      - name: city_code
+        data_tests: [not_null]
+      - name: service_type
+        data_tests: [not_null]
+
+  - name: agg_hourly_city_service
+    description: Hourly marketplace operations mart using direct Asia/Jakarta date/hour fields and a dim_date key.
+    columns:
+      - name: metric_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: metric_date
+        data_tests: [not_null]
+
+  - name: agg_ride_funnel_steps_daily
+    description: Daily lifecycle funnel by Asia/Jakarta requested date with weighted conversion and drop-off fields.
+    columns:
+      - name: metric_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: metric_date
+        data_tests: [not_null]
+
+  - name: agg_driver_performance_daily
+    description: Driver action table at Asia/Jakarta daily driver grain.
+    columns:
+      - name: metric_date_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: metric_date
+        data_tests: [not_null]

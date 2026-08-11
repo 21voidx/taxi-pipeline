@@ -1,0 +1,113 @@
+name: Airflow Runtime CI/CD
+
+on:
+  pull_request:
+    branches: [development, production]
+    paths:
+      - "airflow/Dockerfile"
+      - "airflow/requirements.txt"
+      - ".github/workflows/airflow-runtime.yml"
+  push:
+    branches: [development, production]
+    paths:
+      - "airflow/Dockerfile"
+      - "airflow/requirements.txt"
+      - ".github/workflows/airflow-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    name: Build and test runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build Airflow image
+        run: docker build -t airflow-ci:"$GITHUB_SHA" airflow
+
+      - name: Test current DAGs
+        run: |
+          docker run --rm -i \
+            -v "$PWD/airflow/dags:/opt/airflow/dags:ro" \
+            airflow-ci:"$GITHUB_SHA" python - <<'PY'
+          from airflow.dag_processing.dagbag import DagBag
+
+          dagbag = DagBag(dag_folder="/opt/airflow/dags")
+          if dagbag.import_errors:
+              for file, error in dagbag.import_errors.items():
+                  print(f"\n{file}\n{error}")
+              raise SystemExit(1)
+          print(f"OK: {len(dagbag.dags)} DAG(s) loaded")
+          PY
+
+  publish:
+    name: Publish Airflow image
+    if: github.event_name != 'pull_request'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push immutable + environment tags
+        run: |
+          IMAGE_BASE="ghcr.io/${GITHUB_REPOSITORY,,}-airflow"
+          docker build \
+            -t "$IMAGE_BASE:$GITHUB_SHA" \
+            -t "$IMAGE_BASE:${GITHUB_REF_NAME}-runtime" \
+            airflow
+          docker push "$IMAGE_BASE:$GITHUB_SHA"
+          docker push "$IMAGE_BASE:${GITHUB_REF_NAME}-runtime"
+
+  deploy:
+    name: Deploy Airflow runtime
+    if: github.event_name != 'pull_request'
+    needs: publish
+    runs-on: [self-hosted, Linux, X64]
+    environment: ${{ github.ref_name }}
+    concurrency:
+      group: airflow-runtime-${{ github.ref_name }}
+      cancel-in-progress: false
+    timeout-minutes: 15
+    steps:
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Deploy runtime image
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}-airflow:${GITHUB_SHA}"
+
+          if [ ! -f "$DEPLOY_ROOT/compose.yaml" ]; then
+            echo "Runtime image published. Platform is not bootstrapped yet: $DEPLOY_ROOT/compose.yaml missing."
+            exit 0
+          fi
+
+          cd "$DEPLOY_ROOT"
+          sed -i "s|^AIRFLOW_IMAGE_NAME=.*|AIRFLOW_IMAGE_NAME=$IMAGE|" .env
+
+          docker compose --env-file .env -f compose.yaml pull \
+            airflow-apiserver airflow-scheduler airflow-dag-processor \
+            airflow-triggerer airflow-init airflow-cli
+
+          docker compose --env-file .env -f compose.yaml up airflow-init
+          docker compose --env-file .env -f compose.yaml up -d \
+            --wait --wait-timeout 180 \
+            airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+
+          echo "$GITHUB_SHA" > AIRFLOW_RUNTIME_VERSION
+          docker compose --env-file .env -f compose.yaml ps

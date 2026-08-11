@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ride-generator"
+version = "0.1.0"
+description = "Synthetic CRUD ride-hailing operational data generator"
+requires-python = ">=3.12"
+dependencies = [
+  "Faker==40.35.0",
+  "psycopg[binary]>=3.2,<3.3",
+]
+
+[project.scripts]
+ride-generator = "ride_generator.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

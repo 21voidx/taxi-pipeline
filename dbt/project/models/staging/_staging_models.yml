@@ -1,0 +1,116 @@
+version: 2
+
+models:
+  - name: stg_cities
+    description: Latest deduplicated city records. UTC timestamps are retained and Asia/Jakarta DATETIME columns are added directly in SQL.
+    columns:
+      - name: city_id
+        data_tests: [not_null, unique]
+      - name: city_code
+        data_tests: [not_null, unique]
+      - name: created_at_utc
+        data_tests: [not_null]
+      - name: created_at_jakarta
+        data_tests: [not_null]
+
+  - name: stg_zones
+    description: Latest zone records, including hotspot and zone-type attributes.
+    columns:
+      - name: zone_id
+        data_tests: [not_null, unique]
+      - name: city_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_cities')
+                field: city_id
+
+  - name: stg_customers
+    columns:
+      - name: customer_id
+        data_tests: [not_null, unique]
+      - name: customer_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['ACTIVE', 'INACTIVE']
+      - name: created_at_utc
+        data_tests: [not_null]
+
+  - name: stg_drivers
+    columns:
+      - name: driver_id
+        data_tests: [not_null, unique]
+      - name: service_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['BIKE', 'CAR']
+
+  - name: stg_vehicles
+    columns:
+      - name: vehicle_id
+        data_tests: [not_null, unique]
+      - name: driver_id
+        data_tests: [not_null, unique]
+
+  - name: stg_rides
+    description: One latest version per ride. UTC timestamps remain canonical; Asia/Jakarta DATETIME, DATE, and hour fields support business analytics.
+    columns:
+      - name: ride_id
+        data_tests: [not_null, unique]
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: city_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_cities')
+                field: city_id
+      - name: requested_at_utc
+        data_tests: [not_null]
+      - name: requested_at_jakarta
+        data_tests: [not_null]
+      - name: requested_date
+        description: Business date derived with date(requested_at, 'Asia/Jakarta').
+        data_tests: [not_null]
+      - name: requested_hour
+        description: Business hour derived from requested_at in Asia/Jakarta.
+        data_tests: [not_null]
+      - name: ride_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['REQUESTED', 'ACCEPTED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_DRIVER']
+      - name: service_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['BIKE', 'CAR']
+
+  - name: stg_payments
+    columns:
+      - name: payment_id
+        data_tests: [not_null, unique]
+      - name: ride_id
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('stg_rides')
+                field: ride_id
+      - name: payment_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['PENDING', 'PAID', 'FAILED', 'REFUNDED']
+      - name: created_at_utc
+        data_tests: [not_null]

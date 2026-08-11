@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: raw_ride_hailing
+    database: "{{ env_var('GCP_PROJECT_ID', 'taxi-pipeline-484508') }}"
+    schema: "{{ env_var('BQ_RAW_DATASET', 'raw_ride_hailing') }}"
+    loader: trino
+    description: Current-state raw tables ingested from PostgreSQL through Trino. Source timestamps are stored as UTC TIMESTAMP values.
+    tables:
+      - name: raw_cities
+      - name: raw_zones
+      - name: raw_customers
+      - name: raw_drivers
+      - name: raw_vehicles
+      - name: raw_rides
+      - name: raw_payments

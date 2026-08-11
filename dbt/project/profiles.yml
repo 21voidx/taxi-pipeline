@@ -1,0 +1,40 @@
+ride_hailing:
+
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+
+  outputs:
+
+    # Offline CI target. `dbt parse` does not open a BigQuery connection, so
+    # GitHub Actions can validate the project without a service-account key.
+    ci:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'taxi-pipeline-484508') }}"
+      dataset: ci
+      location: US
+      threads: 1
+      priority: interactive
+
+    dev:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT_ID', 'taxi-pipeline-484508') }}"
+      dataset: dev
+      location: US
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
+      threads: 4
+      priority: interactive
+      job_execution_timeout_seconds: 300
+      job_retries: 1
+
+    prod:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT_ID', 'taxi-pipeline-484508') }}"
+      dataset: prod
+      location: US
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
+      threads: 4
+      priority: interactive
+      job_execution_timeout_seconds: 300
+      job_retries: 1

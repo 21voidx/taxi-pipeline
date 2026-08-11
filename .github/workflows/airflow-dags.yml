@@ -1,0 +1,86 @@
+name: Airflow DAG CI/CD
+
+on:
+  pull_request:
+    branches: [development, production]
+    paths:
+      - "airflow/dags/**"
+      - ".github/workflows/airflow-dags.yml"
+  push:
+    branches: [development, production]
+    paths:
+      - "airflow/dags/**"
+      - ".github/workflows/airflow-dags.yml"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    name: Test DAGs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Test DAG imports with target runtime
+        run: |
+          TARGET_BRANCH="${GITHUB_BASE_REF:-$GITHUB_REF_NAME}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}-airflow:${TARGET_BRANCH}-runtime"
+
+          docker pull "$IMAGE"
+          docker run --rm -i \
+            -v "$PWD/airflow/dags:/opt/airflow/dags:ro" \
+            "$IMAGE" python - <<'PY'
+          from airflow.dag_processing.dagbag import DagBag
+
+          dagbag = DagBag(dag_folder="/opt/airflow/dags")
+
+          if dagbag.import_errors:
+              print("DAG IMPORT ERROR:")
+              for file, error in dagbag.import_errors.items():
+                  print(f"\n{file}\n{error}")
+              raise SystemExit(1)
+
+          if not dagbag.dags:
+              raise SystemExit("ERROR: No DAGs found")
+
+          print(f"OK: {len(dagbag.dags)} DAG(s) loaded")
+          for dag_id in sorted(dagbag.dags):
+              print(f" - {dag_id}")
+          PY
+
+  deploy:
+    name: Sync DAGs
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: [self-hosted, Linux, X64]
+    environment: ${{ github.ref_name }}
+    concurrency:
+      group: airflow-dags-${{ github.ref_name }}
+      cancel-in-progress: false
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Sync DAG folder
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          TARGET="$DEPLOY_ROOT/airflow/dags"
+
+          test -d "$TARGET"
+          rsync -a --delete \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            airflow/dags/ "$TARGET/"
+
+          echo "$GITHUB_SHA" > "$DEPLOY_ROOT/DAG_VERSION"
+          echo "DAGs synced to $TARGET"

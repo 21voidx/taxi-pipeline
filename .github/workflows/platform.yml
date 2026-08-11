@@ -1,0 +1,98 @@
+name: Platform CI/CD
+
+on:
+  pull_request:
+    branches: [development, production]
+    paths:
+      - "deploy/**"
+      - "trino/**"
+      - "postgres-source/**"
+      - "scripts/apply-postgres-migrations.sh"
+      - ".github/workflows/platform.yml"
+  push:
+    branches: [development, production]
+    paths:
+      - "deploy/**"
+      - "trino/**"
+      - "postgres-source/**"
+      - "scripts/apply-postgres-migrations.sh"
+      - ".github/workflows/platform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  validate:
+    name: Validate platform config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate Compose
+        run: |
+          TARGET_BRANCH="${GITHUB_BASE_REF:-$GITHUB_REF_NAME}"
+          ENV_FILE="deploy/.env.${TARGET_BRANCH}.example"
+          docker compose --env-file "$ENV_FILE" -f deploy/compose.yaml config -q
+
+      - name: Python syntax check
+        run: python -m compileall -q airflow/dags generator/src generator/tests
+
+  deploy:
+    name: Deploy platform config
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: [self-hosted, Linux, X64]
+    environment: ${{ github.ref_name }}
+    concurrency:
+      group: platform-${{ github.ref_name }}
+      cancel-in-progress: false
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Sync platform config
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          test -d "$DEPLOY_ROOT"
+          test -f "$DEPLOY_ROOT/.env"
+
+          mkdir -p \
+            "$DEPLOY_ROOT/trino/catalog" \
+            "$DEPLOY_ROOT/trino/etc" \
+            "$DEPLOY_ROOT/postgres-source/init" \
+            "$DEPLOY_ROOT/postgres-source/migrations"
+
+          cp deploy/compose.yaml "$DEPLOY_ROOT/compose.yaml"
+          rsync -a --delete trino/catalog/ "$DEPLOY_ROOT/trino/catalog/"
+          rsync -a --delete trino/etc/ "$DEPLOY_ROOT/trino/etc/"
+          rsync -a --delete postgres-source/init/ "$DEPLOY_ROOT/postgres-source/init/"
+          rsync -a --delete postgres-source/migrations/ "$DEPLOY_ROOT/postgres-source/migrations/"
+
+          cd "$DEPLOY_ROOT"
+          docker compose --env-file .env -f compose.yaml config -q
+          docker compose --env-file .env -f compose.yaml pull
+          docker compose --env-file .env -f compose.yaml --profile tools pull dbt generator-bootstrap
+          docker compose --env-file .env -f compose.yaml up airflow-init
+          docker compose --env-file .env -f compose.yaml up -d \
+            --remove-orphans --wait --wait-timeout 180
+
+      - name: Apply source migrations
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          bash scripts/apply-postgres-migrations.sh "$DEPLOY_ROOT"
+
+      - name: Show platform status
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          cd "$DEPLOY_ROOT"
+          docker compose --env-file .env -f compose.yaml ps

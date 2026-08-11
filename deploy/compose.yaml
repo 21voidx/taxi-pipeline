@@ -1,0 +1,262 @@
+services:
+  postgres-source:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_SOURCE_DB}
+      POSTGRES_USER: ${POSTGRES_SOURCE_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_SOURCE_PASSWORD}
+      TZ: UTC
+    ports:
+      - "${POSTGRES_SOURCE_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_SOURCE_PORT}:5432"
+    volumes:
+      - postgres_source_data:/var/lib/postgresql/data
+      - ./postgres-source/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SOURCE_USER} -d ${POSTGRES_SOURCE_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks: [platform]
+
+  generator:
+    image: ${GENERATOR_IMAGE_NAME}
+    environment:
+      PGHOST: postgres-source
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_SOURCE_DB}
+      PGUSER: ${POSTGRES_SOURCE_USER}
+      PGPASSWORD: ${POSTGRES_SOURCE_PASSWORD}
+      GENERATOR_SEED: ${GENERATOR_SEED}
+      GENERATOR_INTERVAL_SECONDS: ${GENERATOR_INTERVAL_SECONDS}
+      GENERATOR_RIDES_PER_TICK: ${GENERATOR_RIDES_PER_TICK}
+      GENERATOR_BOOTSTRAP_DAYS: ${GENERATOR_BOOTSTRAP_DAYS}
+      GENERATOR_BOOTSTRAP_RIDES_PER_DAY: ${GENERATOR_BOOTSTRAP_RIDES_PER_DAY}
+      GENERATOR_CUSTOMER_COUNT: ${GENERATOR_CUSTOMER_COUNT}
+      GENERATOR_DRIVER_COUNT: ${GENERATOR_DRIVER_COUNT}
+    depends_on:
+      postgres-source:
+        condition: service_healthy
+    command: ["python", "-m", "ride_generator.cli", "realtime"]
+    restart: unless-stopped
+    networks: [platform]
+
+  generator-bootstrap:
+    image: ${GENERATOR_IMAGE_NAME}
+    profiles: ["tools"]
+    environment:
+      PGHOST: postgres-source
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_SOURCE_DB}
+      PGUSER: ${POSTGRES_SOURCE_USER}
+      PGPASSWORD: ${POSTGRES_SOURCE_PASSWORD}
+      GENERATOR_SEED: ${GENERATOR_SEED}
+      GENERATOR_INTERVAL_SECONDS: ${GENERATOR_INTERVAL_SECONDS}
+      GENERATOR_RIDES_PER_TICK: ${GENERATOR_RIDES_PER_TICK}
+      GENERATOR_BOOTSTRAP_DAYS: ${GENERATOR_BOOTSTRAP_DAYS}
+      GENERATOR_BOOTSTRAP_RIDES_PER_DAY: ${GENERATOR_BOOTSTRAP_RIDES_PER_DAY}
+      GENERATOR_CUSTOMER_COUNT: ${GENERATOR_CUSTOMER_COUNT}
+      GENERATOR_DRIVER_COUNT: ${GENERATOR_DRIVER_COUNT}
+    depends_on:
+      postgres-source:
+        condition: service_healthy
+    command: ["python", "-m", "ride_generator.cli", "bootstrap"]
+    restart: "no"
+    networks: [platform]
+
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${AIRFLOW_DB}
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIRFLOW_DB_USER} -d ${AIRFLOW_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [platform]
+
+  trino:
+    image: trinodb/trino:477
+    ports:
+      - "${TRINO_BIND_ADDRESS:-127.0.0.1}:${TRINO_PORT}:8082"
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
+      - ./trino/etc/jvm.config:/etc/trino/jvm.config:ro
+      - ./trino/etc/config.properties:/etc/trino/config.properties:ro
+      - ${GCP_CREDENTIALS_HOST_PATH}:/opt/gcp/service-account.json:ro
+    environment:
+      POSTGRES_DB: ${POSTGRES_SOURCE_DB}
+      POSTGRES_USER: ${POSTGRES_SOURCE_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_SOURCE_PASSWORD}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/gcp/service-account.json
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/v1/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+    restart: unless-stopped
+    networks: [platform]
+
+  dbt:
+    image: ${DBT_IMAGE_NAME}
+    user: "${AIRFLOW_UID}:0"
+    profiles: ["tools"]
+    working_dir: /app
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+      DBT_TARGET: ${DBT_TARGET}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      BQ_RAW_DATASET: ${BQ_RAW_DATASET}
+      BQ_ANALYTICS_DATASET: ${BQ_ANALYTICS_DATASET}
+      BQ_MART_DATASET: ${BQ_MART_DATASET}
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/gcp/service-account.json
+    volumes:
+      - ./dbt/project:/app
+      - ${GCP_CREDENTIALS_HOST_PATH}:/opt/gcp/service-account.json:ro
+    command: ["dbt", "--version"]
+    networks: [platform]
+
+  airflow-apiserver:
+    <<: &airflow-common
+      image: ${AIRFLOW_IMAGE_NAME}
+      user: "${AIRFLOW_UID}:0"
+      group_add:
+        - "${DOCKER_GID}"
+      environment: &airflow-common-env
+        ENVIRONMENT: ${ENVIRONMENT}
+        AIRFLOW_UID: ${AIRFLOW_UID}
+        AIRFLOW__CORE__EXECUTOR: LocalExecutor
+        AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+        AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow-db:5432/${AIRFLOW_DB}
+        AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+        AIRFLOW__CORE__SECRET_KEY: ${AIRFLOW__CORE__SECRET_KEY}
+        AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET}
+        AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: ${AIRFLOW_DAGS_PAUSED_AT_CREATION}
+        AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+        AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+        AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: "60"
+        GOOGLE_APPLICATION_CREDENTIALS: /opt/gcp/service-account.json
+        GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+        AIRFLOW_CONN_TRINO_DEFAULT: trino://trino@trino:8082
+        AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT: "google-cloud-platform://?key_path=%2Fopt%2Fgcp%2Fservice-account.json&project=${GCP_PROJECT_ID}"
+        AIRFLOW_TRINO_CONN_ID: trino_default
+        AIRFLOW_GCP_CONN_ID: google_cloud_default
+        BQ_RAW_DATASET: ${BQ_RAW_DATASET}
+        BQ_ANALYTICS_DATASET: ${BQ_ANALYTICS_DATASET}
+        BQ_MART_DATASET: ${BQ_MART_DATASET}
+        TRINO_CATALOG_POSTGRES: ${TRINO_CATALOG_POSTGRES}
+        TRINO_CATALOG_BIGQUERY: ${TRINO_CATALOG_BIGQUERY}
+        DBT_TARGET: ${DBT_TARGET}
+        DBT_IMAGE_NAME: ${DBT_IMAGE_NAME}
+        DBT_PROJECT_HOST: ${DEPLOY_ROOT}/dbt/project
+        SA_KEY_HOST: ${GCP_CREDENTIALS_HOST_PATH}
+      volumes:
+        - ./airflow/dags:/opt/airflow/dags
+        - ./airflow/logs:/opt/airflow/logs
+        - ./airflow/plugins:/opt/airflow/plugins
+        - ${GCP_CREDENTIALS_HOST_PATH}:/opt/gcp/service-account.json:ro
+        - /var/run/docker.sock:/var/run/docker.sock
+      depends_on:
+        airflow-db:
+          condition: service_healthy
+      restart: unless-stopped
+      networks: [platform]
+    command: api-server
+    ports:
+      - "${AIRFLOW_BIND_ADDRESS:-0.0.0.0}:${AIRFLOW_PORT}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname \"$${HOSTNAME}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type TriggererJob --hostname \"$${HOSTNAME}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    user: "0:0"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/{logs,dags,plugins}
+        chown -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags,plugins}
+        /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
+    restart: "no"
+
+  airflow-cli:
+    <<: *airflow-common
+    profiles: ["tools"]
+    command: ["bash", "-lc", "airflow version"]
+    restart: "no"
+
+volumes:
+  postgres_source_data:
+  airflow_db_data:
+
+networks:
+  platform:
+    driver: bridge

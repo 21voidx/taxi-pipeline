@@ -1,0 +1,81 @@
+name: ride_hailing
+version: 1.0.0
+config-version: 2
+
+profile: ride_hailing
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  # Fact incremental lookback.
+  incremental_lookback_days: 2
+
+  # Aggregate models inspect recently changed fact rows,
+  # then recompute the complete business-date partitions
+  # affected by those changes.
+  agg_change_lookback_days: 7
+
+  # Calendar dimension range.
+  date_spine_start: "2024-01-01"
+  date_spine_end: "2030-12-31"
+
+
+models:
+  ride_hailing:
+
+    # =========================================================
+    # STAGING
+    # =========================================================
+    staging:
+      +materialized: view
+      +schema: "{{ env_var('BQ_ANALYTICS_DATASET', 'analytics_ride_hailing') }}"
+      +tags:
+        - staging
+        - daily
+
+    # =========================================================
+    # INTERMEDIATE
+    # =========================================================
+    intermediate:
+      +materialized: table
+      +schema: "{{ env_var('BQ_ANALYTICS_DATASET', 'analytics_ride_hailing') }}"
+      +tags:
+        - intermediate
+        - daily
+
+    # =========================================================
+    # DIMENSIONS
+    # =========================================================
+    dimensions:
+      +materialized: table
+      +schema: "{{ env_var('BQ_ANALYTICS_DATASET', 'analytics_ride_hailing') }}"
+      +tags:
+        - dimension
+        - daily
+
+    # =========================================================
+    # FACTS
+    # =========================================================
+    facts:
+      +schema: "{{ env_var('BQ_ANALYTICS_DATASET', 'analytics_ride_hailing') }}"
+      +tags:
+        - fact
+        - daily
+
+    # =========================================================
+    # MARTS
+    # =========================================================
+    marts:
+      +schema: "{{ env_var('BQ_MART_DATASET', 'mart_ride_hailing') }}"
+      +tags:
+        - mart
+        - looker
+        - daily

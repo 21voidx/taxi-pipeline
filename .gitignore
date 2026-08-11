@@ -1,0 +1,35 @@
+# Secrets and local runtime config
+.env
+.env.*
+!.env.example
+!deploy/.env.development.example
+!deploy/.env.production.example
+credentials/*.json
+!credentials/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Airflow runtime
+airflow/logs/
+airflow/plugins/
+
+# dbt generated files
+dbt/project/target/
+dbt/project/logs/
+dbt/project/dbt_packages/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Deployment markers
+DAG_VERSION
+DBT_PROJECT_VERSION
+AIRFLOW_RUNTIME_VERSION
+DBT_RUNTIME_VERSION
+GENERATOR_VERSION

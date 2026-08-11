@@ -1,0 +1,191 @@
+name: dbt CI/CD
+
+on:
+  pull_request:
+    branches: [development, production]
+    paths:
+      - "dbt/**"
+      - ".github/workflows/dbt.yml"
+  push:
+    branches: [development, production]
+    paths:
+      - "dbt/**"
+      - ".github/workflows/dbt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  changes:
+    name: Detect dbt changes
+    runs-on: ubuntu-latest
+    outputs:
+      project: ${{ steps.filter.outputs.project }}
+      runtime: ${{ steps.filter.outputs.runtime }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect paths
+        id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            files=$'dbt/project/dbt_project.yml\ndbt/Dockerfile'
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}"
+            files="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [[ "$BEFORE" =~ ^0+$ ]]; then
+              files="$(git show --pretty='' --name-only "$GITHUB_SHA")"
+            else
+              files="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+            fi
+          fi
+
+          printf '%s\n' "$files"
+
+          if printf '%s\n' "$files" | grep -Eq '^(dbt/project/|\.github/workflows/dbt\.yml$)'; then
+            echo "project=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "project=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if printf '%s\n' "$files" | grep -Eq '^(dbt/(Dockerfile|requirements\.txt)|\.github/workflows/dbt\.yml)$'; then
+            echo "runtime=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "runtime=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  project-ci:
+    name: Validate dbt project
+    needs: changes
+    if: needs.changes.outputs.project == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: dbt deps and parse
+        run: |
+          TARGET_BRANCH="${GITHUB_BASE_REF:-$GITHUB_REF_NAME}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}-dbt:${TARGET_BRANCH}-runtime"
+          docker pull "$IMAGE"
+          docker run --rm \
+            -v "$PWD/dbt/project:/app" \
+            -w /app \
+            -e DBT_TARGET=ci \
+            -e GCP_PROJECT_ID=taxi-pipeline-484508 \
+            "$IMAGE" sh -lc 'dbt deps && dbt parse --target ci'
+
+  runtime-ci:
+    name: Build dbt runtime
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build runtime
+        run: docker build -t dbt-ci:"$GITHUB_SHA" dbt
+
+      - name: Validate project with new runtime
+        run: |
+          docker run --rm \
+            -v "$PWD/dbt/project:/app" \
+            -w /app \
+            -e DBT_TARGET=ci \
+            -e GCP_PROJECT_ID=taxi-pipeline-484508 \
+            dbt-ci:"$GITHUB_SHA" sh -lc 'dbt deps && dbt parse --target ci'
+
+  sync-project:
+    name: Sync dbt project
+    if: github.event_name == 'push' && needs.changes.outputs.project == 'true'
+    needs: [changes, project-ci]
+    runs-on: [self-hosted, Linux, X64]
+    environment: ${{ github.ref_name }}
+    concurrency:
+      group: dbt-project-${{ github.ref_name }}
+      cancel-in-progress: false
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Sync project without rebuilding image
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          TARGET="$DEPLOY_ROOT/dbt/project"
+          test -d "$TARGET"
+          rsync -a --delete \
+            --exclude target/ --exclude logs/ --exclude dbt_packages/ \
+            dbt/project/ "$TARGET/"
+          echo "$GITHUB_SHA" > "$DEPLOY_ROOT/DBT_PROJECT_VERSION"
+
+  publish-runtime:
+    name: Publish dbt runtime
+    if: github.event_name != 'pull_request' && needs.changes.outputs.runtime == 'true'
+    needs: [changes, runtime-ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        run: |
+          IMAGE_BASE="ghcr.io/${GITHUB_REPOSITORY,,}-dbt"
+          docker build \
+            -t "$IMAGE_BASE:$GITHUB_SHA" \
+            -t "$IMAGE_BASE:${GITHUB_REF_NAME}-runtime" \
+            dbt
+          docker push "$IMAGE_BASE:$GITHUB_SHA"
+          docker push "$IMAGE_BASE:${GITHUB_REF_NAME}-runtime"
+
+  deploy-runtime:
+    name: Deploy dbt runtime
+    if: github.event_name != 'pull_request' && needs.changes.outputs.runtime == 'true'
+    needs: [changes, publish-runtime]
+    runs-on: [self-hosted, Linux, X64]
+    environment: ${{ github.ref_name }}
+    concurrency:
+      group: dbt-runtime-${{ github.ref_name }}
+      cancel-in-progress: false
+    timeout-minutes: 10
+    steps:
+      - name: Login GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull new dbt runtime
+        run: |
+          DEPLOY_ROOT="/opt/data-platform-${GITHUB_REF_NAME}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}-dbt:${GITHUB_REF_NAME}-runtime"
+
+          if [ ! -f "$DEPLOY_ROOT/compose.yaml" ]; then
+            echo "dbt image published. Platform bootstrap is still pending."
+            exit 0
+          fi
+
+          docker pull "$IMAGE"
+          echo "$GITHUB_SHA" > "$DEPLOY_ROOT/DBT_RUNTIME_VERSION"
+          echo "Airflow uses the stable environment dbt tag and DockerOperator force_pull=True."
