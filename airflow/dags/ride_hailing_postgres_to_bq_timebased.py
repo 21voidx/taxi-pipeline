@@ -44,12 +44,12 @@ TRINO_BQ_CAT = os.getenv("TRINO_CATALOG_BIGQUERY", "bigquery")
 TRINO_PG_CAT = os.getenv("TRINO_CATALOG_POSTGRES", "postgresql")
 
 BQ_PROJECT = os.getenv("GCP_PROJECT_ID", "taxi-pipeline-484508")
-BQ_DATASET = os.getenv("BQ_RAW_DATASET", "raw_ride_hailing")
+BQ_DATASET = os.getenv("BQ_RAW_DATASET", "prod_raw_ride_hailing")
 BQ_LOCATION = os.getenv("GCP_LOCATION", "US")
 PG_SCHEMA = os.getenv("POSTGRES_SOURCE_SCHEMA", "public")
 
 BASE_LABELS = {
-    "env": os.getenv("ENVIRONMENT", "dev"),
+    "env": os.getenv("ENVIRONMENT", "production"),
     "team": "data-eng",
     "layer": "raw",
     "pipeline": "timebased-ingestion",
