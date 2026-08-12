@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_SOURCE_PASSWORD}
       TZ: UTC
     ports:
-      - "${POSTGRES_SOURCE_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_SOURCE_PORT}:5432"
+      - "${TAILSCALE_IP}:${POSTGRES_SOURCE_PORT}:5432"
     volumes:
       - postgres_source_data:/var/lib/postgresql/data
       - ./postgres-source/init:/docker-entrypoint-initdb.d:ro
@@ -83,7 +83,7 @@ services:
   trino:
     image: trinodb/trino:477
     ports:
-      - "${TRINO_BIND_ADDRESS:-127.0.0.1}:${TRINO_PORT}:8082"
+      - "${TAILSCALE_IP}:${TRINO_PORT}:8082"
     volumes:
       - ./trino/catalog:/etc/trino/catalog:ro
       - ./trino/etc/jvm.config:/etc/trino/jvm.config:ro
@@ -171,7 +171,7 @@ services:
       networks: [platform]
     command: api-server
     ports:
-      - "${AIRFLOW_BIND_ADDRESS:-0.0.0.0}:${AIRFLOW_PORT}:8080"
+      - "${TAILSCALE_IP}:${AIRFLOW_PORT}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
       interval: 30s
