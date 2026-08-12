@@ -225,8 +225,7 @@ jobs:
             -f compose.yaml \
             --profile tools \
             pull \
-            dbt \
-            generator-bootstrap
+            dbt 
 
 
       # -----------------------------------------------------
