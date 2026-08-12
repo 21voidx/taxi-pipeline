@@ -8,8 +8,6 @@ on:
     paths:
       - "deploy/**"
       - "trino/**"
-      - "postgres-source/**"
-      - "scripts/apply-postgres-migrations.sh"
       - ".github/workflows/platform.yml"
 
   push:
@@ -19,8 +17,6 @@ on:
     paths:
       - "deploy/**"
       - "trino/**"
-      - "postgres-source/**"
-      - "scripts/apply-postgres-migrations.sh"
       - ".github/workflows/platform.yml"
 
   # Hanya untuk initial bootstrap / recovery.
@@ -63,10 +59,6 @@ jobs:
             config \
             --no-interpolate \
             -q
-
-      - name: Validate migration script
-        run: |
-          bash -n scripts/apply-postgres-migrations.sh
 
       - name: Validation summary
         run: |
@@ -179,9 +171,8 @@ jobs:
         run: |
           mkdir -p \
             "$DEPLOY_ROOT/trino/catalog" \
-            "$DEPLOY_ROOT/trino/etc" \
-            "$DEPLOY_ROOT/postgres-source/init" \
-            "$DEPLOY_ROOT/postgres-source/migrations"
+            "$DEPLOY_ROOT/trino/etc"
+
 
           cp \
             deploy/compose.yaml \
@@ -194,14 +185,6 @@ jobs:
           rsync -a --delete \
             trino/etc/ \
             "$DEPLOY_ROOT/trino/etc/"
-
-          rsync -a --delete \
-            postgres-source/init/ \
-            "$DEPLOY_ROOT/postgres-source/init/"
-
-          rsync -a --delete \
-            postgres-source/migrations/ \
-            "$DEPLOY_ROOT/postgres-source/migrations/"
 
           echo "Platform configuration synchronized."
 
@@ -275,16 +258,6 @@ jobs:
             --remove-orphans \
             --wait \
             --wait-timeout 180
-
-
-      # -----------------------------------------------------
-      # PostgreSQL source migrations
-      # -----------------------------------------------------
-      - name: Apply PostgreSQL source migrations
-        run: |
-          bash \
-            scripts/apply-postgres-migrations.sh \
-            "$DEPLOY_ROOT"
 
 
       # -----------------------------------------------------

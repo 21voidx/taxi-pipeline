@@ -1,69 +1,4 @@
 services:
-  postgres-source:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: ${POSTGRES_SOURCE_DB}
-      POSTGRES_USER: ${POSTGRES_SOURCE_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_SOURCE_PASSWORD}
-      TZ: UTC
-    ports:
-      - "${TAILSCALE_IP}:${POSTGRES_SOURCE_PORT}:5432"
-    volumes:
-      - postgres_source_data:/var/lib/postgresql/data
-      - ./postgres-source/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SOURCE_USER} -d ${POSTGRES_SOURCE_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    restart: unless-stopped
-    networks: [platform]
-
-  generator:
-    image: ${GENERATOR_IMAGE_NAME}
-    environment:
-      PGHOST: postgres-source
-      PGPORT: 5432
-      PGDATABASE: ${POSTGRES_SOURCE_DB}
-      PGUSER: ${POSTGRES_SOURCE_USER}
-      PGPASSWORD: ${POSTGRES_SOURCE_PASSWORD}
-      GENERATOR_SEED: ${GENERATOR_SEED}
-      GENERATOR_INTERVAL_SECONDS: ${GENERATOR_INTERVAL_SECONDS}
-      GENERATOR_RIDES_PER_TICK: ${GENERATOR_RIDES_PER_TICK}
-      GENERATOR_BOOTSTRAP_DAYS: ${GENERATOR_BOOTSTRAP_DAYS}
-      GENERATOR_BOOTSTRAP_RIDES_PER_DAY: ${GENERATOR_BOOTSTRAP_RIDES_PER_DAY}
-      GENERATOR_CUSTOMER_COUNT: ${GENERATOR_CUSTOMER_COUNT}
-      GENERATOR_DRIVER_COUNT: ${GENERATOR_DRIVER_COUNT}
-    depends_on:
-      postgres-source:
-        condition: service_healthy
-    command: ["python", "-m", "ride_generator.cli", "realtime"]
-    restart: unless-stopped
-    networks: [platform]
-
-  generator-bootstrap:
-    image: ${GENERATOR_IMAGE_NAME}
-    profiles: ["tools"]
-    environment:
-      PGHOST: postgres-source
-      PGPORT: 5432
-      PGDATABASE: ${POSTGRES_SOURCE_DB}
-      PGUSER: ${POSTGRES_SOURCE_USER}
-      PGPASSWORD: ${POSTGRES_SOURCE_PASSWORD}
-      GENERATOR_SEED: ${GENERATOR_SEED}
-      GENERATOR_INTERVAL_SECONDS: ${GENERATOR_INTERVAL_SECONDS}
-      GENERATOR_RIDES_PER_TICK: ${GENERATOR_RIDES_PER_TICK}
-      GENERATOR_BOOTSTRAP_DAYS: ${GENERATOR_BOOTSTRAP_DAYS}
-      GENERATOR_BOOTSTRAP_RIDES_PER_DAY: ${GENERATOR_BOOTSTRAP_RIDES_PER_DAY}
-      GENERATOR_CUSTOMER_COUNT: ${GENERATOR_CUSTOMER_COUNT}
-      GENERATOR_DRIVER_COUNT: ${GENERATOR_DRIVER_COUNT}
-    depends_on:
-      postgres-source:
-        condition: service_healthy
-    command: ["python", "-m", "ride_generator.cli", "bootstrap"]
-    restart: "no"
-    networks: [platform]
-
   airflow-db:
     image: postgres:16
     environment:
@@ -102,7 +37,10 @@ services:
       retries: 10
       start_period: 45s
     restart: unless-stopped
-    networks: [platform]
+    networks:
+      - platform
+      - source
+    
 
   dbt:
     image: ${DBT_IMAGE_NAME}
@@ -254,9 +192,11 @@ services:
     restart: "no"
 
 volumes:
-  postgres_source_data:
   airflow_db_data:
 
 networks:
   platform:
     driver: bridge
+  source:
+    external: true
+    name: ride-hailing-source
