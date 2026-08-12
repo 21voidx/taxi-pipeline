@@ -16,10 +16,10 @@ SA_KEY_CONTAINER = "/opt/gcp/service-account.json"
 
 DBT_PROJECT_HOST = os.getenv(
     "DBT_PROJECT_HOST",
-    "/opt/data-platform-development/dbt/project",
+    "/opt/data-platform-production/dbt/project",
 )
 DBT_IMAGE = os.getenv("DBT_IMAGE_NAME", "dbt-project:local")
-DBT_TARGET = os.getenv("DBT_TARGET", "dev")
+DBT_TARGET = os.getenv("DBT_TARGET", "prod")
 DBT_BASE = f"--project-dir /app --profiles-dir /app --target {DBT_TARGET}"
 
 
@@ -38,14 +38,14 @@ DOCKER_COMMON = {
     "user": os.getenv("AIRFLOW_UID", "1001"),
     "mount_tmp_dir": False,
     "environment": {
-        "ENVIRONMENT": os.getenv("ENVIRONMENT", "development"),
+        "ENVIRONMENT": os.getenv("ENVIRONMENT", "production"),
         "GCP_PROJECT_ID": os.getenv("GCP_PROJECT_ID", "taxi-pipeline-484508"),
-        "BQ_RAW_DATASET": os.getenv("BQ_RAW_DATASET", "raw_ride_hailing"),
+        "BQ_RAW_DATASET": os.getenv("BQ_RAW_DATASET", "prod_raw_ride_hailing"),
         "BQ_ANALYTICS_DATASET": os.getenv(
             "BQ_ANALYTICS_DATASET",
-            "analytics_ride_hailing",
+            "prod_analytics_ride_hailing",
         ),
-        "BQ_MART_DATASET": os.getenv("BQ_MART_DATASET", "mart_ride_hailing"),
+        "BQ_MART_DATASET": os.getenv("BQ_MART_DATASET", "prod_mart_ride_hailing"),
         "DBT_TARGET": DBT_TARGET,
         "GOOGLE_APPLICATION_CREDENTIALS": SA_KEY_CONTAINER,
     },
