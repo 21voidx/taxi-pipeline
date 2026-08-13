@@ -74,8 +74,20 @@ def ingestion_hallolaundry_transactions():
         seen_ids: set[str] = set()
         session = build_http_session()
 
+        LOG.info(
+            "Starting transaction extraction mode=%s start_date=%s end_date=%s "
+            "run_id=%s ingestion_date=%s",
+            mode,
+            start_date,
+            end_date,
+            run_id,
+            ingestion_date,
+        )
+
         try:
             authenticate(session)
+            LOG.info("HalloLaundry authentication successful.")
+
             with new_temp_ndjson("hallolaundry_transaction_") as list_file, new_temp_ndjson(
                 "hallolaundry_transaction_detail_"
             ) as detail_file:
@@ -83,7 +95,21 @@ def ingestion_hallolaundry_transactions():
                 detail_path = detail_file.name
 
                 for range_start, range_end in generate_date_ranges(start_date, end_date):
+                    LOG.info(
+                        "Starting API range %s..%s",
+                        range_start,
+                        range_end,
+                    )
+
                     for page in range(1, MAX_PAGES_PER_RANGE + 1):
+                        LOG.info(
+                            "Fetching transaction page range=%s..%s page=%s per_page=%s",
+                            range_start,
+                            range_end,
+                            page,
+                            PER_PAGE,
+                        )
+
                         payload = get_json(
                             session,
                             LIST_URL,
@@ -152,21 +178,57 @@ def ingestion_hallolaundry_transactions():
                                 detail_rows += 1
                                 seen_ids.add(trx_id)
 
+                                # Detail endpoint is intentionally rate-limited and can take
+                                # several minutes per list page. Emit periodic progress so the
+                                # Airflow task log does not look idle while detail scraping runs.
+                                if detail_rows % 25 == 0:
+                                    LOG.info(
+                                        "Transaction detail progress "
+                                        "range=%s..%s page=%s detail_rows=%s "
+                                        "unique_transaction_ids=%s",
+                                        range_start,
+                                        range_end,
+                                        page,
+                                        detail_rows,
+                                        len(seen_ids),
+                                    )
+
                         LOG.info(
-                            "range=%s..%s page=%s list_rows=%s detail_rows=%s",
+                            "Completed transaction page "
+                            "range=%s..%s page=%s page_rows=%s "
+                            "list_rows=%s detail_rows=%s",
                             range_start,
                             range_end,
                             page,
+                            len(records),
                             list_rows,
                             detail_rows,
                         )
                         if len(records) < PER_PAGE:
+                            LOG.info(
+                                "Completed API range %s..%s at page=%s "
+                                "(last page rows=%s).",
+                                range_start,
+                                range_end,
+                                page,
+                                len(records),
+                            )
                             break
+
                         pause(PAGE_DELAY_SECONDS)
                     else:
                         raise AirflowException(
                             f"Exceeded MAX_PAGES_PER_RANGE for {range_start}..{range_end}."
                         )
+
+            LOG.info(
+                "Transaction extraction completed. "
+                "list_rows=%s detail_rows=%s unique_transaction_ids=%s. "
+                "Starting GCS upload.",
+                list_rows,
+                detail_rows,
+                len(seen_ids),
+            )
 
             list_meta = upload_ndjson(
                 temp_path=list_path,
@@ -179,6 +241,10 @@ def ingestion_hallolaundry_transactions():
                 start_date=start_date,
                 end_date=end_date,
             )
+            LOG.info(
+                "Transaction list upload completed. Starting transaction detail upload."
+            )
+
             detail_meta = upload_ndjson(
                 temp_path=detail_path,
                 entity="transaction_detail",
@@ -189,6 +255,12 @@ def ingestion_hallolaundry_transactions():
                 mode=mode,
                 start_date=start_date,
                 end_date=end_date,
+            )
+            LOG.info(
+                "Transaction extraction and GCS upload completed. "
+                "list_rows=%s detail_rows=%s",
+                list_rows,
+                detail_rows,
             )
             return {"transaction": list_meta, "transaction_detail": detail_meta}
         finally:
