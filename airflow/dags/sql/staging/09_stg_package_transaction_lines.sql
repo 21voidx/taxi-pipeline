@@ -86,8 +86,13 @@ SELECT
         NULLIF(SAFE_CAST(line.service.quantity AS NUMERIC), 0)
       ) AS estimated_deposit_value_consumed,
 
-  SAFE_CAST(
-    line.service.regular_service.is_can_scanning AS BOOL
+  COALESCE(
+    SAFE_CAST(
+      line.service.regular_service.is_can_scanning AS BOOL
+    ),
+    SAFE_CAST(
+      line.service.regular_service.is_can_scanning AS INT64
+    ) != 0
   ) AS is_can_scanning,
 
   SAFE_CAST(
