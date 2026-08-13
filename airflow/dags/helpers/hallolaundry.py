@@ -300,15 +300,22 @@ def cleanup_temp(*paths: str | None) -> None:
             Path(path).unlink(missing_ok=True)
 
 
-def load_ndjson_to_bigquery(meta: dict) -> dict:
+def load_ndjson_to_bigquery(
+    meta: dict,
+    *,
+    schema: list[dict] | None = None,
+    ignore_unknown_values: bool = False,
+    job_version: str | None = None,
+) -> dict:
     if int(meta["row_count"]) == 0:
         LOG.warning("%s extraction returned 0 rows; RAW load is a no-op.", meta["entity"])
         return {**meta, "bq_loaded": False, "bq_job_id": None}
 
     raw_table = meta["raw_table"]
     safe_run = safe_identifier(meta["run_id"], 180)
+    effective_job_version = job_version or RAW_LOAD_JOB_VERSION
     job_id = safe_identifier(
-        f"haghi_{RAW_LOAD_JOB_VERSION}_{raw_table}_{safe_run}", 220
+        f"haghi_{effective_job_version}_{raw_table}_{safe_run}", 220
     )
     destination = f"{GCP_PROJECT_ID}.{BQ_RAW_DATASET}.{raw_table}"
 
@@ -357,35 +364,61 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
         project_id=GCP_PROJECT_ID,
     )
 
-    LOG.info(
-        "RAW table schema mode destination=%s table_exists=%s autodetect=%s",
-        destination,
-        table_exists,
-        not table_exists,
-    )
+    if schema is not None:
+        LOG.info(
+            "RAW explicit schema mode destination=%s table_exists=%s "
+            "autodetect=False top_level_fields=%s ignore_unknown_values=%s",
+            destination,
+            table_exists,
+            len(schema),
+            ignore_unknown_values,
+        )
 
-    configuration = {
-        "load": {
-            "sourceUris": [meta["gcs_uri"]],
-            "destinationTable": {
-                "projectId": GCP_PROJECT_ID,
-                "datasetId": BQ_RAW_DATASET,
-                "tableId": raw_table,
-            },
-            "sourceFormat": "NEWLINE_DELIMITED_JSON",
-
-            # Autodetect only when the RAW table does not exist yet.
-            # Existing tables reuse their current schema so later batches
-            # cannot re-infer STRING fields as TIMESTAMP (or vice versa).
-            "autodetect": not table_exists,
-
-            "createDisposition": "CREATE_IF_NEEDED",
-            "writeDisposition": "WRITE_APPEND",
-            "timePartitioning": {"type": "DAY"},
-            "ignoreUnknownValues": False,
-            "maxBadRecords": 0,
+        configuration = {
+            "load": {
+                "sourceUris": [meta["gcs_uri"]],
+                "destinationTable": {
+                    "projectId": GCP_PROJECT_ID,
+                    "datasetId": BQ_RAW_DATASET,
+                    "tableId": raw_table,
+                },
+                "sourceFormat": "NEWLINE_DELIMITED_JSON",
+                "schema": {"fields": schema},
+                "autodetect": False,
+                "createDisposition": "CREATE_IF_NEEDED",
+                "writeDisposition": "WRITE_APPEND",
+                "timePartitioning": {"type": "DAY"},
+                "ignoreUnknownValues": ignore_unknown_values,
+                "maxBadRecords": 0,
+            }
         }
-    }
+    else:
+        # Backward-compatible behavior for DAGs that have not yet migrated
+        # to an explicit RAW schema.
+        LOG.info(
+            "RAW table schema mode destination=%s table_exists=%s autodetect=%s",
+            destination,
+            table_exists,
+            not table_exists,
+        )
+
+        configuration = {
+            "load": {
+                "sourceUris": [meta["gcs_uri"]],
+                "destinationTable": {
+                    "projectId": GCP_PROJECT_ID,
+                    "datasetId": BQ_RAW_DATASET,
+                    "tableId": raw_table,
+                },
+                "sourceFormat": "NEWLINE_DELIMITED_JSON",
+                "autodetect": not table_exists,
+                "createDisposition": "CREATE_IF_NEEDED",
+                "writeDisposition": "WRITE_APPEND",
+                "timePartitioning": {"type": "DAY"},
+                "ignoreUnknownValues": False,
+                "maxBadRecords": 0,
+            }
+        }
 
     job = hook.insert_job(
         configuration=configuration,
