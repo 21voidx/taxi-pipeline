@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 
 DAG_ID = "ingestion_hallolaundry_machine_scans"
 LIST_URL = "https://api-docs.hallolaundry.com/api/v2/iot/machines/scanning-histories"
-PER_PAGE = 100
+PER_PAGE = 10
 
 
 @dag(
