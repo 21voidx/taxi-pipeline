@@ -43,11 +43,19 @@ SELECT
     ) AS INT64
   ) AS configured_multiply_scanning,
 
-  SAFE_CAST(
-    COALESCE(
-      op.service.regular_service.is_can_scanning,
-      op.service.is_can_scanning
-    ) AS BOOL
+  COALESCE(
+    SAFE_CAST(
+      COALESCE(
+        op.service.regular_service.is_can_scanning,
+        op.service.is_can_scanning
+      ) AS BOOL
+    ),
+    SAFE_CAST(
+      COALESCE(
+        op.service.regular_service.is_can_scanning,
+        op.service.is_can_scanning
+      ) AS INT64
+    ) != 0
   ) AS is_can_scanning,
 
   CAST(op.rack.id AS STRING) AS rack_id,

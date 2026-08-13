@@ -41,11 +41,20 @@ SELECT
   CAST(t.transaction_status_text AS STRING) AS transaction_status_text,
 
   CAST(t.position AS STRING) AS position_name,
-  SAFE_CAST(t.is_late AS BOOL) AS is_late,
-  SAFE_CAST(t.is_delivery AS BOOL) AS is_delivery,
+  COALESCE(
+    SAFE_CAST(t.is_late AS BOOL),
+    SAFE_CAST(t.is_late AS INT64) != 0
+  ) AS is_late,
+  COALESCE(
+    SAFE_CAST(t.is_delivery AS BOOL),
+    SAFE_CAST(t.is_delivery AS INT64) != 0
+  ) AS is_delivery,
 
   -- is_express exists in raw_transaction, not raw_transaction_detail.
-  SAFE_CAST(t.is_express AS BOOL) AS is_express,
+  COALESCE(
+    SAFE_CAST(t.is_express AS BOOL),
+    SAFE_CAST(t.is_express AS INT64) != 0
+  ) AS is_express,
 
   SAFE_CAST(t.company_outlet_express_service_id AS STRING)
     AS express_service_id,

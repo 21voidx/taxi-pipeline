@@ -11,10 +11,20 @@ SELECT
   NULLIF(TRIM(CAST(customer_code AS STRING)), '') AS customer_code,
   NULLIF(TRIM(CAST(honorific AS STRING)), '') AS honorific,
 
-  SAFE_CAST(is_membership AS INT64) = 1 AS is_membership,
-  SAFE_CAST(is_membership_deposit AS INT64) = 1
-    AS is_membership_deposit,
-  SAFE_CAST(is_active AS INT64) = 1 AS is_active,
+  COALESCE(
+    SAFE_CAST(is_membership AS BOOL),
+    SAFE_CAST(is_membership AS INT64) != 0
+  ) AS is_membership,
+
+  COALESCE(
+    SAFE_CAST(is_membership_deposit AS BOOL),
+    SAFE_CAST(is_membership_deposit AS INT64) != 0
+  ) AS is_membership_deposit,
+
+  COALESCE(
+    SAFE_CAST(is_active AS BOOL),
+    SAFE_CAST(is_active AS INT64) != 0
+  ) AS is_active,
 
   NULLIF(TRIM(CAST(phone AS STRING)), '') AS phone_raw,
   SAFE_CAST(gender AS INT64) AS gender_code,
@@ -40,6 +50,5 @@ QUALIFY ROW_NUMBER() OVER (
   ORDER BY SAFE_CAST(_ingested_at AS TIMESTAMP) DESC
 ) = 1;
 
--- Catatan production:
--- ketika full snapshot customer di-append setiap hari, tambahkan _ingested_at
--- dan gunakan _ingested_at DESC untuk memilih snapshot terbaru.
+-- Snapshot customer dapat di-append berulang.
+-- Dedup di atas memilih snapshot terbaru berdasarkan _ingested_at.

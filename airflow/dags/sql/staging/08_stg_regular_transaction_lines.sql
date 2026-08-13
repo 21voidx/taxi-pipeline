@@ -44,8 +44,10 @@ SELECT
   SAFE_CAST(line.net_amount AS NUMERIC) AS net_unit_price,
   SAFE_CAST(line.sub_total AS NUMERIC) AS line_amount,
 
-  SAFE_CAST(line.service.is_can_scanning AS BOOL)
-    AS is_can_scanning,
+  COALESCE(
+    SAFE_CAST(line.service.is_can_scanning AS BOOL),
+    SAFE_CAST(line.service.is_can_scanning AS INT64) != 0
+  ) AS is_can_scanning,
   SAFE_CAST(line.service.multiply_scanning AS INT64)
     AS configured_multiply_scanning,
 

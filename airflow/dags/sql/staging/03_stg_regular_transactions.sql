@@ -39,8 +39,14 @@ SELECT
   CAST(t.transaction_status_text AS STRING) AS transaction_status_text,
   CAST(t.position AS STRING) AS position_name,
 
-  SAFE_CAST(t.is_late AS BOOL) AS is_late,
-  SAFE_CAST(t.is_delivery AS BOOL) AS is_delivery,
+  COALESCE(
+    SAFE_CAST(t.is_late AS BOOL),
+    SAFE_CAST(t.is_late AS INT64) != 0
+  ) AS is_late,
+  COALESCE(
+    SAFE_CAST(t.is_delivery AS BOOL),
+    SAFE_CAST(t.is_delivery AS INT64) != 0
+  ) AS is_delivery,
 
   -- Primary source: raw_transaction.is_express through idx.
   -- Fallbacks only use fields that exist in raw_transaction_detail.

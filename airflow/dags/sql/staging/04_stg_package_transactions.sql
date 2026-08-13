@@ -24,8 +24,10 @@ SELECT
 
   CAST(t.customer.uuid AS STRING) AS customer_uuid,
   CAST(t.customer.name AS STRING) AS customer_name,
-  SAFE_CAST(t.customer.is_membership_deposit AS BOOL)
-    AS is_membership_deposit,
+  COALESCE(
+    SAFE_CAST(t.customer.is_membership_deposit AS BOOL),
+    SAFE_CAST(t.customer.is_membership_deposit AS INT64) != 0
+  ) AS is_membership_deposit,
 
   SAFE_CAST(t.company_outlet_id AS INT64) AS outlet_id,
   CAST(t.outlet.name AS STRING) AS outlet_name,
@@ -39,8 +41,14 @@ SELECT
   CAST(t.transaction_status_text AS STRING) AS transaction_status_text,
   CAST(t.position AS STRING) AS position_name,
 
-  SAFE_CAST(t.is_late AS BOOL) AS is_late,
-  SAFE_CAST(t.is_delivery AS BOOL) AS is_delivery,
+  COALESCE(
+    SAFE_CAST(t.is_late AS BOOL),
+    SAFE_CAST(t.is_late AS INT64) != 0
+  ) AS is_late,
+  COALESCE(
+    SAFE_CAST(t.is_delivery AS BOOL),
+    SAFE_CAST(t.is_delivery AS INT64) != 0
+  ) AS is_delivery,
 
   SAFE_CAST(t.transaction_progress AS INT64) AS transaction_progress,
   SAFE_CAST(t.workshop_progress AS INT64) AS workshop_progress,
