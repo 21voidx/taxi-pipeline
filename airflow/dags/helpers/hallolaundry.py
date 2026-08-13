@@ -173,6 +173,7 @@ def authenticate(session: requests.Session) -> None:
             f"HalloLaundry authentication failed: {payload.get('message') or 'unknown error'}"
         )
     session.headers["Authorization"] = f"Bearer {token}"
+    LOG.info("HalloLaundry API authentication successful.")
 
 
 def get_json(
@@ -253,12 +254,28 @@ def upload_ndjson(
         f"run_id={safe_run}/{entity}.ndjson"
     )
 
+    LOG.info(
+        "Starting GCS upload entity=%s rows=%s uri=gs://%s/%s",
+        entity,
+        row_count,
+        bucket,
+        object_name,
+    )
+
     GCSHook(gcp_conn_id=GCP_CONN_ID).upload(
         bucket_name=bucket,
         object_name=object_name,
         filename=temp_path,
         mime_type="application/x-ndjson",
         num_max_attempts=3,
+    )
+
+    LOG.info(
+        "GCS upload completed entity=%s rows=%s uri=gs://%s/%s",
+        entity,
+        row_count,
+        bucket,
+        object_name,
     )
 
     return {
@@ -291,6 +308,15 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
     safe_run = safe_identifier(meta["run_id"], 180)
     job_id = safe_identifier(f"haghi_{raw_table}_{safe_run}", 220)
     destination = f"{GCP_PROJECT_ID}.{BQ_RAW_DATASET}.{raw_table}"
+
+    LOG.info(
+        "Starting BigQuery RAW load entity=%s rows=%s destination=%s "
+        "source=%s",
+        meta["entity"],
+        meta["row_count"],
+        destination,
+        meta["gcs_uri"],
+    )
 
     hook = BigQueryHook(
         gcp_conn_id=GCP_CONN_ID,
@@ -350,6 +376,15 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
     )
     if job.error_result:
         raise AirflowException(f"BigQuery RAW load failed: {job.error_result}")
+
+    LOG.info(
+        "BigQuery RAW load completed entity=%s rows=%s "
+        "job_id=%s destination=%s",
+        meta["entity"],
+        meta["row_count"],
+        job_id,
+        destination,
+    )
 
     return {
         **meta,
