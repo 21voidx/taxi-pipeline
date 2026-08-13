@@ -31,7 +31,7 @@ LOGIN_URL = "https://api-docs.hallolaundry.com/api/v2/auth/user"
 USERNAME_VARIABLE = "HALLOLAUNDRY_USERNAME"
 PASSWORD_VARIABLE = "HALLOLAUNDRY_PASSWORD"
 
-GCP_CONN_ID = "google_cloud_haghi"
+GCP_CONN_ID = "google_cloud_default"
 GCP_PROJECT_ID = os.getenv("HAGHI_GCP_PROJECT_ID", "dbt-taxi-explore")
 BQ_RAW_DATASET = os.getenv("HAGHI_BQ_RAW_DATASET", "raw_haghi_laundry")
 BQ_STG_DATASET = os.getenv("HAGHI_BQ_STG_DATASET", "stg_haghi_laundry")
