@@ -28,8 +28,8 @@ from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobO
 LOG = logging.getLogger(__name__)
 
 LOGIN_URL = "https://api-docs.hallolaundry.com/api/v2/auth/user"
-USERNAME_VARIABLE = Variable.get("HALLOLAUNDRY_USERNAME")
-PASSWORD_VARIABLE = Variable.get("HALLOLAUNDRY_PASSWORD")
+USERNAME_VARIABLE = "HALLOLAUNDRY_USERNAME"
+PASSWORD_VARIABLE = "HALLOLAUNDRY_PASSWORD"
 
 GCP_CONN_ID = "google_cloud_default_dbt-taxi-explore"
 GCP_PROJECT_ID = os.getenv("HAGHI_GCP_PROJECT_ID", "dbt-taxi-explore")
@@ -37,7 +37,7 @@ BQ_RAW_DATASET = os.getenv("HAGHI_BQ_RAW_DATASET", "raw_haghi_laundry")
 BQ_STG_DATASET = os.getenv("HAGHI_BQ_STG_DATASET", "stg_haghi_laundry")
 BQ_MART_DATASET = os.getenv("HAGHI_BQ_MART_DATASET", "mart_haghi_laundry")
 BQ_LOCATION = os.getenv("HAGHI_BQ_LOCATION", "US")
-GCS_BUCKET_ENV = Variable.get("HALLOLAUNDRY_GCS_BUCKET")
+GCS_BUCKET_ENV = "HALLOLAUNDRY_GCS_BUCKET"
 DAGS_DIR = Path(__file__).resolve().parents[1]
 SQL_DIR = DAGS_DIR / "sql"
 
