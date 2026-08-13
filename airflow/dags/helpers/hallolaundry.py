@@ -25,6 +25,8 @@ from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 
+from helpers.hallolaundry_schemas import get_raw_schema
+
 LOG = logging.getLogger(__name__)
 
 LOGIN_URL = "https://api-docs.hallolaundry.com/api/v2/auth/user"
@@ -49,7 +51,7 @@ REQUEST_TIMEOUT = (10, 60)
 PAGE_DELAY_SECONDS = float(os.getenv("HAGHI_API_PAGE_DELAY_SECONDS", "4.0"))
 DETAIL_DELAY_SECONDS = float(os.getenv("HAGHI_API_DETAIL_DELAY_SECONDS", "2.5"))
 RETRYABLE_HTTP_STATUS = (429, 500, 502, 503, 504)
-RAW_LOAD_JOB_VERSION = "v2"
+RAW_LOAD_JOB_VERSION = "v3_explicit_schema"
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -200,6 +202,23 @@ def get_json(
     return payload
 
 
+
+def stringify_scalar_values(value):
+    """Recursively preserve JSON shape while storing every scalar as STRING."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {key: stringify_scalar_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [stringify_scalar_values(item) for item in value]
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return str(value)
+    return str(value)
+
 def add_ingestion_metadata(
     row: dict,
     *,
@@ -210,7 +229,7 @@ def add_ingestion_metadata(
     start_date: date | None,
     end_date: date | None,
 ) -> dict:
-    result = dict(row)
+    result = stringify_scalar_values(row)
     result.update(
         {
             "_ingested_at": ingested_at,
@@ -351,6 +370,8 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
             "idempotent_reattach": True,
         }
 
+    explicit_schema = get_raw_schema(raw_table)
+
     table_exists = hook.table_exists(
         dataset_id=BQ_RAW_DATASET,
         table_id=raw_table,
@@ -358,10 +379,11 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
     )
 
     LOG.info(
-        "RAW table schema mode destination=%s table_exists=%s autodetect=%s",
+        "RAW explicit schema mode destination=%s table_exists=%s "
+        "autodetect=False top_level_fields=%s",
         destination,
         table_exists,
-        not table_exists,
+        len(explicit_schema),
     )
 
     configuration = {
@@ -373,16 +395,16 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
                 "tableId": raw_table,
             },
             "sourceFormat": "NEWLINE_DELIMITED_JSON",
-
-            # Autodetect only when the RAW table does not exist yet.
-            # Existing tables reuse their current schema so later batches
-            # cannot re-infer STRING fields as TIMESTAMP (or vice versa).
-            "autodetect": not table_exists,
-
+            "schema": {"fields": explicit_schema},
+            "autodetect": False,
             "createDisposition": "CREATE_IF_NEEDED",
             "writeDisposition": "WRITE_APPEND",
             "timePartitioning": {"type": "DAY"},
-            "ignoreUnknownValues": False,
+
+            # The explicit RAW contract is intentionally limited to fields
+            # referenced by the supplied STG/MART SQL. Extra source fields
+            # remain preserved in GCS but are ignored by BigQuery RAW.
+            "ignoreUnknownValues": True,
             "maxBadRecords": 0,
         }
     }
