@@ -49,6 +49,7 @@ REQUEST_TIMEOUT = (10, 60)
 PAGE_DELAY_SECONDS = float(os.getenv("HAGHI_API_PAGE_DELAY_SECONDS", "4.0"))
 DETAIL_DELAY_SECONDS = float(os.getenv("HAGHI_API_DETAIL_DELAY_SECONDS", "2.5"))
 RETRYABLE_HTTP_STATUS = (429, 500, 502, 503, 504)
+RAW_LOAD_JOB_VERSION = "v2"
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -306,7 +307,9 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
 
     raw_table = meta["raw_table"]
     safe_run = safe_identifier(meta["run_id"], 180)
-    job_id = safe_identifier(f"haghi_{raw_table}_{safe_run}", 220)
+    job_id = safe_identifier(
+        f"haghi_{RAW_LOAD_JOB_VERSION}_{raw_table}_{safe_run}", 220
+    )
     destination = f"{GCP_PROJECT_ID}.{BQ_RAW_DATASET}.{raw_table}"
 
     LOG.info(
@@ -348,6 +351,19 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
             "idempotent_reattach": True,
         }
 
+    table_exists = hook.table_exists(
+        dataset_id=BQ_RAW_DATASET,
+        table_id=raw_table,
+        project_id=GCP_PROJECT_ID,
+    )
+
+    LOG.info(
+        "RAW table schema mode destination=%s table_exists=%s autodetect=%s",
+        destination,
+        table_exists,
+        not table_exists,
+    )
+
     configuration = {
         "load": {
             "sourceUris": [meta["gcs_uri"]],
@@ -357,10 +373,14 @@ def load_ndjson_to_bigquery(meta: dict) -> dict:
                 "tableId": raw_table,
             },
             "sourceFormat": "NEWLINE_DELIMITED_JSON",
-            "autodetect": True,
+
+            # Autodetect only when the RAW table does not exist yet.
+            # Existing tables reuse their current schema so later batches
+            # cannot re-infer STRING fields as TIMESTAMP (or vice versa).
+            "autodetect": not table_exists,
+
             "createDisposition": "CREATE_IF_NEEDED",
             "writeDisposition": "WRITE_APPEND",
-            "schemaUpdateOptions": ["ALLOW_FIELD_ADDITION", "ALLOW_FIELD_RELAXATION"],
             "timePartitioning": {"type": "DAY"},
             "ignoreUnknownValues": False,
             "maxBadRecords": 0,
