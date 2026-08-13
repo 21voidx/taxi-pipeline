@@ -62,8 +62,8 @@ BROWSER_HEADERS = {
 }
 
 
-def required_env(name: str) -> str:
-    value = os.getenv(name)
+def required_variable(name: str) -> str:
+    value = Variable.get(name, default=None)
     if not value:
         raise AirflowException(f"Required environment variable {name!r} is not set.")
     return value
@@ -149,8 +149,8 @@ def build_http_session() -> requests.Session:
 
 
 def authenticate(session: requests.Session) -> None:
-    username = Variable.get(USERNAME_VARIABLE)
-    password = Variable.get(PASSWORD_VARIABLE)
+    username = required_variable("HALLOLAUNDRY_USERNAME")
+    password = required_variable("HALLOLAUNDRY_PASSWORD")
     if not username or not password:
         raise AirflowException(
             f"Airflow Variables {USERNAME_VARIABLE!r} and {PASSWORD_VARIABLE!r} are required."
@@ -245,7 +245,7 @@ def upload_ndjson(
     start_date: date | None,
     end_date: date | None,
 ) -> dict:
-    bucket = required_env(GCS_BUCKET_ENV)
+    bucket = required_variable(GCS_BUCKET_ENV)
     safe_run = safe_identifier(run_id)
     object_name = (
         f"raw/hallolaundry/{entity}/"
