@@ -25,6 +25,8 @@ from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 
+from helpers.hallolaundry_schemas import get_raw_schema
+
 LOG = logging.getLogger(__name__)
 
 LOGIN_URL = "https://api-docs.hallolaundry.com/api/v2/auth/user"
@@ -49,7 +51,7 @@ REQUEST_TIMEOUT = (10, 60)
 PAGE_DELAY_SECONDS = float(os.getenv("HAGHI_API_PAGE_DELAY_SECONDS", "4.0"))
 DETAIL_DELAY_SECONDS = float(os.getenv("HAGHI_API_DETAIL_DELAY_SECONDS", "2.5"))
 RETRYABLE_HTTP_STATUS = (429, 500, 502, 503, 504)
-RAW_LOAD_JOB_VERSION = "v2"
+RAW_LOAD_JOB_VERSION = "v3_explicit_schema"
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -200,6 +202,23 @@ def get_json(
     return payload
 
 
+
+def stringify_scalar_values(value):
+    """Recursively preserve JSON shape while storing every scalar as STRING."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {key: stringify_scalar_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [stringify_scalar_values(item) for item in value]
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return str(value)
+    return str(value)
+
 def add_ingestion_metadata(
     row: dict,
     *,
@@ -210,7 +229,7 @@ def add_ingestion_metadata(
     start_date: date | None,
     end_date: date | None,
 ) -> dict:
-    result = dict(row)
+    result = stringify_scalar_values(row)
     result.update(
         {
             "_ingested_at": ingested_at,
@@ -300,22 +319,15 @@ def cleanup_temp(*paths: str | None) -> None:
             Path(path).unlink(missing_ok=True)
 
 
-def load_ndjson_to_bigquery(
-    meta: dict,
-    *,
-    schema: list[dict] | None = None,
-    ignore_unknown_values: bool = False,
-    job_version: str | None = None,
-) -> dict:
+def load_ndjson_to_bigquery(meta: dict) -> dict:
     if int(meta["row_count"]) == 0:
         LOG.warning("%s extraction returned 0 rows; RAW load is a no-op.", meta["entity"])
         return {**meta, "bq_loaded": False, "bq_job_id": None}
 
     raw_table = meta["raw_table"]
     safe_run = safe_identifier(meta["run_id"], 180)
-    effective_job_version = job_version or RAW_LOAD_JOB_VERSION
     job_id = safe_identifier(
-        f"haghi_{effective_job_version}_{raw_table}_{safe_run}", 220
+        f"haghi_{RAW_LOAD_JOB_VERSION}_{raw_table}_{safe_run}", 220
     )
     destination = f"{GCP_PROJECT_ID}.{BQ_RAW_DATASET}.{raw_table}"
 
@@ -358,67 +370,44 @@ def load_ndjson_to_bigquery(
             "idempotent_reattach": True,
         }
 
+    explicit_schema = get_raw_schema(raw_table)
+
     table_exists = hook.table_exists(
         dataset_id=BQ_RAW_DATASET,
         table_id=raw_table,
         project_id=GCP_PROJECT_ID,
     )
 
-    if schema is not None:
-        LOG.info(
-            "RAW explicit schema mode destination=%s table_exists=%s "
-            "autodetect=False top_level_fields=%s ignore_unknown_values=%s",
-            destination,
-            table_exists,
-            len(schema),
-            ignore_unknown_values,
-        )
+    LOG.info(
+        "RAW explicit schema mode destination=%s table_exists=%s "
+        "autodetect=False top_level_fields=%s",
+        destination,
+        table_exists,
+        len(explicit_schema),
+    )
 
-        configuration = {
-            "load": {
-                "sourceUris": [meta["gcs_uri"]],
-                "destinationTable": {
-                    "projectId": GCP_PROJECT_ID,
-                    "datasetId": BQ_RAW_DATASET,
-                    "tableId": raw_table,
-                },
-                "sourceFormat": "NEWLINE_DELIMITED_JSON",
-                "schema": {"fields": schema},
-                "autodetect": False,
-                "createDisposition": "CREATE_IF_NEEDED",
-                "writeDisposition": "WRITE_APPEND",
-                "timePartitioning": {"type": "DAY"},
-                "ignoreUnknownValues": ignore_unknown_values,
-                "maxBadRecords": 0,
-            }
-        }
-    else:
-        # Backward-compatible behavior for DAGs that have not yet migrated
-        # to an explicit RAW schema.
-        LOG.info(
-            "RAW table schema mode destination=%s table_exists=%s autodetect=%s",
-            destination,
-            table_exists,
-            not table_exists,
-        )
+    configuration = {
+        "load": {
+            "sourceUris": [meta["gcs_uri"]],
+            "destinationTable": {
+                "projectId": GCP_PROJECT_ID,
+                "datasetId": BQ_RAW_DATASET,
+                "tableId": raw_table,
+            },
+            "sourceFormat": "NEWLINE_DELIMITED_JSON",
+            "schema": {"fields": explicit_schema},
+            "autodetect": False,
+            "createDisposition": "CREATE_IF_NEEDED",
+            "writeDisposition": "WRITE_APPEND",
+            "timePartitioning": {"type": "DAY"},
 
-        configuration = {
-            "load": {
-                "sourceUris": [meta["gcs_uri"]],
-                "destinationTable": {
-                    "projectId": GCP_PROJECT_ID,
-                    "datasetId": BQ_RAW_DATASET,
-                    "tableId": raw_table,
-                },
-                "sourceFormat": "NEWLINE_DELIMITED_JSON",
-                "autodetect": not table_exists,
-                "createDisposition": "CREATE_IF_NEEDED",
-                "writeDisposition": "WRITE_APPEND",
-                "timePartitioning": {"type": "DAY"},
-                "ignoreUnknownValues": False,
-                "maxBadRecords": 0,
-            }
+            # The explicit RAW contract is intentionally limited to fields
+            # referenced by the supplied STG/MART SQL. Extra source fields
+            # remain preserved in GCS but are ignored by BigQuery RAW.
+            "ignoreUnknownValues": True,
+            "maxBadRecords": 0,
         }
+    }
 
     job = hook.insert_job(
         configuration=configuration,
