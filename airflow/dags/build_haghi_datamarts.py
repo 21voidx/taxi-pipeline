@@ -30,15 +30,15 @@ def build_haghi_datamarts():
 
     business = make_bigquery_sql_task(
         "mart_daily_business_performance",
-        "mart/20_mart_daily_business_performance.sql",
+        "mart_performance/20_mart_daily_business_performance.sql",
     )
     service = make_bigquery_sql_task(
         "mart_daily_service_performance",
-        "mart/21_mart_daily_service_performance.sql",
+        "mart_performance/21_mart_daily_service_performance.sql",
     )
     unit = make_bigquery_sql_task(
         "mart_daily_unit_performance",
-        "mart/24_mart_daily_unit_performance.sql",
+        "mart_performance/24_mart_daily_unit_performance.sql",
     )
 
     unit_reference >> [business, service, unit]
