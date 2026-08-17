@@ -287,7 +287,7 @@ def _merge_cache_rows(client, rows: list[dict]) -> None:
     if not rows:
         return
 
-    payload = json.dumps(rows, ensure_ascii=False)
+    payload = json.dumps(rows, ensure_ascii=False, allow_nan=False)
     sql = f"""
     MERGE `{_table_id(CACHE_TABLE)}` AS target
     USING (
@@ -314,7 +314,7 @@ def _merge_cache_rows(client, rows: list[dict]) -> None:
             JSON_VALUE(item, '$.geocode_provider') AS geocode_provider,
             JSON_VALUE(item, '$.geocode_attribution') AS geocode_attribution,
             SAFE_CAST(JSON_VALUE(item, '$.geocoded_at') AS TIMESTAMP) AS geocoded_at
-        FROM UNNEST(JSON_QUERY_ARRAY(PARSE_JSON(@payload))) AS item
+        FROM UNNEST(JSON_QUERY_ARRAY(PARSE_JSON(@payload, wide_number_mode=>'round'))) AS item
     ) AS source
     ON target.address_hash = source.address_hash
 
@@ -440,7 +440,7 @@ def _ensure_outlet_reference(client, session, api_key: str) -> tuple[float, floa
         "geocoded_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    payload = json.dumps([row], ensure_ascii=False)
+    payload = json.dumps([row], ensure_ascii=False, allow_nan=False)
     sql = f"""
     INSERT INTO `{_table_id(OUTLET_TABLE)}` (
         outlet_name,
@@ -461,7 +461,7 @@ def _ensure_outlet_reference(client, session, api_key: str) -> tuple[float, floa
         JSON_VALUE(item, '$.geocode_provider'),
         JSON_VALUE(item, '$.geocode_attribution'),
         SAFE_CAST(JSON_VALUE(item, '$.geocoded_at') AS TIMESTAMP)
-    FROM UNNEST(JSON_QUERY_ARRAY(PARSE_JSON(@payload))) AS item
+    FROM UNNEST(JSON_QUERY_ARRAY(PARSE_JSON(@payload, wide_number_mode=>'round'))) AS item
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("payload", "STRING", payload)]
