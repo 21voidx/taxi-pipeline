@@ -45,27 +45,42 @@ normalized AS (
         customer_name,
         address_id,
         address_raw,
+
         TRIM(
             REGEXP_REPLACE(
                 REGEXP_REPLACE(
                     REGEXP_REPLACE(
                         REGEXP_REPLACE(
-                            LOWER(address_raw),
-                            r'\b(jln|jl)\.?',
-                            'jalan'
+                            REGEXP_REPLACE(
+                                LOWER(address_raw),
+
+                                -- jl / jln / jl. / jln. -> "jalan "
+                                r'\b(jln|jl)\.?',
+                                'jalan '
+                            ),
+
+                            -- repair malformed "jalanxxx"
+                            r'\bjalan(?=[a-z0-9])',
+                            'jalan '
                         ),
+
+                        -- punctuation -> space
                         r'[,.;]+',
                         ' '
                     ),
+
+                    -- collapse multiple spaces
                     r'\s+',
                     ' '
                 ),
+
                 r'\bnomer\b',
                 'nomor'
             )
         ) AS address_normalized
+
     FROM main_address
-),
+)
 
 classified AS (
     SELECT
