@@ -2,28 +2,28 @@ version: 2
 
 exposures:
   - name: executive_dashboard
-    label: Ride-Hailing Executive Dashboard
+    label: Ride-Hailing Dashboard
     type: dashboard
     maturity: medium
-    url: https://lookerstudio.google.com/
+    url: https://datastudio.google.com/reporting/c90727ac-6540-4772-a462-0edec4b0db9f
     description: Growth, revenue, city-service contribution, and business health.
     depends_on:
       - ref('agg_daily_city_service')
       - ref('agg_hourly_city_service')
     owner:
-      name: Portfolio Owner
-      email: portfolio@example.com
+      name: Hafizh Trinelzy
+      email: hafizhtrinelzy2002@gmail.com
 
   - name: operations_dashboard
-    label: Ride-Hailing Operations Dashboard
+    label: Ride-Hailing Dashboard
     type: dashboard
     maturity: medium
-    url: https://lookerstudio.google.com/
+    url: https://datastudio.google.com/reporting/c90727ac-6540-4772-a462-0edec4b0db9f
     description: Funnel, peak-hour, hotspot, and driver performance monitoring.
     depends_on:
       - ref('agg_hourly_city_service')
       - ref('agg_ride_funnel_steps_daily')
       - ref('agg_driver_performance_daily')
     owner:
-      name: Portfolio Owner
-      email: portfolio@example.com
+        name: Hafizh Trinelzy
+        email: hafizhtrinelzy2002@gmail.com
