@@ -40,18 +40,18 @@ PRIMARY_COUNTRY_CODE = "id"
 GEOCODE_DELAY_SECONDS = float(os.getenv("HAGHI_GEOCODE_DELAY_SECONDS", "0.25"))
 GEOCODE_MAX_PER_RUN = int(os.getenv("HAGHI_GEOCODE_MAX_PER_RUN", "1000"))
 
-# Fallback search is intentionally local. 10 km is wider than Haghi's 5 km
+# All geocoding searches are hard-limited to 8 km from the outlet. 8 km is wider than Haghi's 5 km
 # free-pickup policy, while preventing generic street names from resolving
 # to far-away Jakarta/Bogor/Bekasi locations.
 GEOCODE_SEARCH_RADIUS_METERS = int(
-    os.getenv("HAGHI_GEOCODE_SEARCH_RADIUS_METERS", "10000")
+    os.getenv("HAGHI_GEOCODE_SEARCH_RADIUS_METERS", "8000")
 )
 
 # Bump this value whenever the matching/geocoding strategy changes materially.
 # Rows with an older/null version are automatically reprocessed.
 GEOCODE_ALGORITHM_VERSION = os.getenv(
     "HAGHI_GEOCODE_ALGORITHM_VERSION",
-    "v2_depok_first_10km_fallback",
+    "v3_depok_first_8km_hard_cap",
 )
 
 MERGE_BATCH_SIZE = int(os.getenv("HAGHI_GEOCODE_MERGE_BATCH_SIZE", "100"))
@@ -185,7 +185,10 @@ def _request_depok_primary(
             "state": PRIMARY_STATE,
             "country": PRIMARY_COUNTRY,
             "type": "street",
-            "filter": f"countrycode:{PRIMARY_COUNTRY_CODE}",
+            "filter": (
+                f"countrycode:{PRIMARY_COUNTRY_CODE}|"
+                f"circle:{longitude},{latitude},{GEOCODE_SEARCH_RADIUS_METERS}"
+            ),
             "bias": f"proximity:{longitude},{latitude}",
         }
         strategy = "DEPOK_STRUCTURED"
@@ -197,7 +200,10 @@ def _request_depok_primary(
                 f"{geocode_query}, {PRIMARY_CITY}, "
                 f"{PRIMARY_STATE}, {PRIMARY_COUNTRY}"
             ),
-            "filter": f"countrycode:{PRIMARY_COUNTRY_CODE}",
+            "filter": (
+                f"countrycode:{PRIMARY_COUNTRY_CODE}|"
+                f"circle:{longitude},{latitude},{GEOCODE_SEARCH_RADIUS_METERS}"
+            ),
             "bias": f"proximity:{longitude},{latitude}",
         }
         strategy = "DEPOK_CONTEXT_TEXT"
@@ -212,7 +218,7 @@ def _request_local_fallback(
     geocode_query: str,
     proximity: tuple[float, float],
 ) -> tuple[list[dict], str]:
-    """Attempt 2: allow nearby non-Depok results but restrict them to 10 km."""
+    """Attempt 2: allow nearby non-Depok results but hard-restrict them to 8 km."""
     longitude, latitude = proximity
     params = {
         "text": geocode_query,
@@ -819,7 +825,7 @@ def geocode_new_customer_addresses() -> dict:
 
     Matching:
     1. Prefer Depok/Jawa Barat/Indonesia context.
-    2. If no reliable Depok match exists, retry within 10 km of the outlet.
+    2. If no reliable Depok match exists, retry within 8 km of the outlet.
     3. Keep ambiguous/zero-results explicit instead of fabricating coordinates.
     """
 
