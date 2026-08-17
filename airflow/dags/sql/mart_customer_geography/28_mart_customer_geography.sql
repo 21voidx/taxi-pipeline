@@ -1,8 +1,8 @@
 -- Dashboard-ready geography mart.
 -- Grain: 1 row = 1 customer from mart_customer_analytics.
 --
--- This mart intentionally preserves customers without usable addresses so that
--- Total Customers and Geocode Coverage can be calculated from one source.
+-- Customer metrics/RFM stay owned by mart_customer_analytics.
+-- This mart only enriches those customer rows with geography attributes.
 
 CREATE OR REPLACE TABLE
 `{{ params.project_id }}.{{ params.mart_dataset }}.mart_customer_geography`
@@ -20,7 +20,8 @@ WITH cache_latest AS (
 outlet AS (
     SELECT *
     FROM `{{ params.project_id }}.{{ params.stg_dataset }}.geography_outlet_reference`
-    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    WHERE latitude IS NOT NULL
+      AND longitude IS NOT NULL
     QUALIFY ROW_NUMBER() OVER (
         ORDER BY geocoded_at DESC
     ) = 1
@@ -30,7 +31,7 @@ joined AS (
     SELECT
         ca.*,
 
-        -- Address-quality metadata. Raw/full address is intentionally not
+        -- Address-quality metadata. Full/raw address is deliberately not
         -- exposed to the dashboard mart.
         a.input_location_precision,
         a.geocode_query,
@@ -40,6 +41,12 @@ joined AS (
             WHEN g.address_hash IS NULL THEN 'PENDING'
             ELSE g.geocode_status
         END AS geocode_status,
+
+        g.geocode_version,
+        g.geocode_strategy,
+        g.match_type AS geocode_match_type,
+        g.is_depok_result,
+        g.geocoder_distance_m,
 
         COALESCE(g.location_precision, 'UNKNOWN') AS location_precision,
         g.location_label,
@@ -60,14 +67,44 @@ joined AS (
 
         g.latitude AS map_latitude,
         g.longitude AS map_longitude,
+
+        CASE
+            WHEN g.latitude IS NOT NULL
+             AND g.longitude IS NOT NULL
+            THEN CONCAT(
+                CAST(g.latitude AS STRING),
+                ',',
+                CAST(g.longitude AS STRING)
+            )
+        END AS map_geo,
+
         CASE
             WHEN g.location_label IS NULL THEN NULL
             ELSE CONCAT(
                 g.location_label,
-                IF(g.suburb IS NOT NULL AND g.suburb != g.location_label, CONCAT(', ', g.suburb), ''),
-                IF(g.district IS NOT NULL AND g.district != g.location_label, CONCAT(', ', g.district), ''),
-                IF(g.city IS NOT NULL AND g.city != g.location_label, CONCAT(', ', g.city), ''),
-                IF(g.state IS NOT NULL, CONCAT(', ', g.state), ''),
+                IF(
+                    g.suburb IS NOT NULL
+                    AND g.suburb != g.location_label,
+                    CONCAT(', ', g.suburb),
+                    ''
+                ),
+                IF(
+                    g.district IS NOT NULL
+                    AND g.district != g.location_label,
+                    CONCAT(', ', g.district),
+                    ''
+                ),
+                IF(
+                    g.city IS NOT NULL
+                    AND g.city != g.location_label,
+                    CONCAT(', ', g.city),
+                    ''
+                ),
+                IF(
+                    g.state IS NOT NULL,
+                    CONCAT(', ', g.state),
+                    ''
+                ),
                 ', Indonesia'
             )
         END AS map_location,
@@ -78,12 +115,21 @@ joined AS (
         o.longitude AS outlet_longitude,
 
         CASE
-            WHEN
-                g.geocode_status = 'SUCCESS'
-                AND g.latitude IS NOT NULL
-                AND g.longitude IS NOT NULL
-                AND o.latitude IS NOT NULL
-                AND o.longitude IS NOT NULL
+            WHEN o.latitude IS NOT NULL
+             AND o.longitude IS NOT NULL
+            THEN CONCAT(
+                CAST(o.latitude AS STRING),
+                ',',
+                CAST(o.longitude AS STRING)
+            )
+        END AS outlet_map_geo,
+
+        CASE
+            WHEN g.geocode_status = 'SUCCESS'
+             AND g.latitude IS NOT NULL
+             AND g.longitude IS NOT NULL
+             AND o.latitude IS NOT NULL
+             AND o.longitude IS NOT NULL
             THEN ST_DISTANCE(
                 ST_GEOGPOINT(g.longitude, g.latitude),
                 ST_GEOGPOINT(o.longitude, o.latitude)
@@ -148,6 +194,7 @@ final AS (
 
 SELECT
     * REPLACE (
-        ROUND(estimated_distance_km, 2) AS estimated_distance_km
+        ROUND(estimated_distance_km, 2) AS estimated_distance_km,
+        ROUND(geocoder_distance_m, 0) AS geocoder_distance_m
     )
 FROM final;
