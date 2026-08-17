@@ -4,6 +4,7 @@
 -- - address_raw/address_normalized remain internal in STG.
 -- - geocode_query removes house number and RT/RW before being sent to the
 --   external geocoder. The dashboard is intentionally street/area level.
+-- - only detail_customer_addresses rows with is_main = true are used.
 
 CREATE OR REPLACE TABLE
 `{{ params.project_id }}.{{ params.stg_dataset }}.int_customer_primary_address`
@@ -59,7 +60,9 @@ normalized AS (
                                 'jalan '
                             ),
 
-                            -- repair malformed "jalanxxx"
+                            -- Repair malformed values such as:
+                            -- jalannusantara -> jalan nusantara
+                            -- jalanbeji      -> jalan beji
                             r'\bjalan([a-z0-9])',
                             r'jalan \1'
                         ),
@@ -107,21 +110,28 @@ classified AS (
 privacy_minimized AS (
     SELECT
         *,
+
         TRIM(
             REGEXP_REPLACE(
                 REGEXP_REPLACE(
                     REGEXP_REPLACE(
                         address_normalized,
+
+                        -- Remove explicit house-number tokens.
                         r'\b(no|nomor)\s*[a-z0-9/-]+',
                         ' '
                     ),
+
+                    -- Remove RT/RW before external geocoding.
                     r'\b(rt|rw)\s*[0-9/-]+',
                     ' '
                 ),
+
                 r'\s+',
                 ' '
             )
         ) AS geocode_query
+
     FROM classified
 )
 
@@ -131,10 +141,14 @@ SELECT
     address_id,
     address_raw,
     address_normalized,
+
     NULLIF(geocode_query, '') AS geocode_query,
+
     CASE
         WHEN NULLIF(geocode_query, '') IS NULL THEN NULL
         ELSE TO_HEX(SHA256(geocode_query))
     END AS address_hash,
+
     input_location_precision
+
 FROM privacy_minimized;
