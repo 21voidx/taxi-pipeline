@@ -60,8 +60,8 @@ normalized AS (
                             ),
 
                             -- repair malformed "jalanxxx"
-                            r'\bjalan(?=[a-z0-9])',
-                            'jalan '
+                            r'\bjalan([a-z0-9])',
+                            r'jalan \1'
                         ),
 
                         -- punctuation -> space
@@ -80,7 +80,7 @@ normalized AS (
         ) AS address_normalized
 
     FROM main_address
-)
+),
 
 classified AS (
     SELECT
