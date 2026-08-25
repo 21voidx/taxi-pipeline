@@ -11,7 +11,7 @@ The pipeline is designed around mutable ride and payment records. Recent records
 ## Architecture
 
 <p align="center">
-  <img src="images/data_platform_architecture.png" alt="Ride-hailing data platform architecture" width="100%" />
+  <img src="images/data_platform_architecture_v2.png" alt="Ride-hailing data platform architecture" width="100%" />
 </p>
 
 PostgreSQL, Trino, Airflow, and dbt run as Dockerized services on a **home server**. Airflow and Trino are exposed only through the server's **Tailscale network**, while BigQuery and Looker Studio remain managed cloud services. GitHub Actions deploys changes through a self-hosted runner.
